@@ -38,6 +38,7 @@ select option{background:#0b111c}
 .chip{background:rgba(0,20,60,.6);border:1.5px solid rgba(100,150,255,.3);color:#fff;border-radius:16px;padding:6px 12px;font:600 14px 'Roboto Condensed';cursor:pointer}
 .chip.on{background:linear-gradient(135deg,#c8a84b,#f5d073);color:#0a0a1a;border-color:#f5d073}
 .tabs{display:flex;gap:8px;margin:4px 0 8px}.btn.sm.on{background:linear-gradient(135deg,#c8a84b,#f5d073);color:#0a0a1a}
+.sm1{background:rgba(255,255,255,.04);border:1px solid rgba(200,168,75,.25);border-radius:10px;padding:10px 12px;margin:8px 0}
 table.pt{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
 .pt th{font:600 11px Oswald;letter-spacing:1px;color:#c3a469;text-align:center;padding:6px 3px}
 .pt td{text-align:center;padding:8px 3px;border-top:1px solid rgba(255,255,255,.08)}
@@ -69,18 +70,19 @@ body.ovb .foot{display:none}
 <div class="w"><div id="app"></div><div class="foot">Created by Amanullah Khan | www.smartstudygrid.com</div></div>
 
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,collection,doc,getDocs,setDoc,updateDoc,deleteDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {getAuth,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {initializeApp,getApps} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getFirestore,collection,doc,getDoc,getDocs,arrayUnion,arrayRemove,setDoc,updateDoc,deleteDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-const app = initializeApp({
+const cfg = {
   apiKey: "AIzaSyDkGhScAIq0tkzEosWkScD0doTq9VyLaq4",
   authDomain: "cricketscoreapp-fa258.firebaseapp.com",
   projectId: "cricketscoreapp-fa258",
   storageBucket: "cricketscoreapp-fa258.firebasestorage.app",
   messagingSenderId: "833946397398",
   appId: "1:833946397398:web:a14bba67a7e3cbab9d7777"
-});
+};
+const app = initializeApp(cfg);
 const db = getFirestore(app), auth = getAuth(app);
 
 const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:"", tab:"m", sel:{1:[],2:[]}, sub:{1:"",2:""}};
@@ -91,7 +93,7 @@ const when = t => t ? new Date(t).toLocaleString([], {weekday:"short", day:"nume
 const tname = id => (S.tours.find(t => t.id === id) || {}).name || "";
 const ovs = b => `${Math.floor(b / 6)}.${b % 6}`;
 const ref = id => doc(db, "matches", id);
-const flash = t => { const e = $("#msg"); if (e) e.textContent = t; };
+const flash = (t, ok) => { const e = $("#msg"); if (e) { e.textContent = t; e.style.color = ok ? "#6be58c" : ""; } };
 const act = async fn => { try { await fn(); } catch (e) { flash(e.code === "permission-denied" ? "Not allowed — sign in as admin." : e.message); } };
 
 // ---- derived match info ----
@@ -159,15 +161,16 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 // ---- LIST ----
 function list(){
   S.view = "list"; S.ex = false; if (S.unsubM) S.unsubM();
-  $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Cricket Scorer</h1>${S.admin ? `<button class="btn s sm" id="so">Sign Out</button>` : `<button class="btn s sm" id="ad">Admin</button>`}</div>
+  $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Cricket Scorer</h1>${auth.currentUser ? `<button class="btn s sm" id="so">Sign Out</button>` : `<button class="btn s sm" id="ad">Sign In</button>`}</div>
     <select id="ft"><option value="">All tournaments</option>${S.tours.map(t => `<option value="${esc(t.id)}" ${t.id === S.tour ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
     <div class="tabs"><button class="btn s sm ${S.tab === "m" ? "on" : ""}" id="tm">Matches</button><button class="btn s sm ${S.tab === "p" ? "on" : ""}" id="tp">Points Table</button></div>
-    ${S.admin ? `<button class="btn" id="sch">＋ Schedule Match</button>` : ""}<div id="ml"></div><div id="msg" class="msg"></div>`;
+    ${S.admin ? `<button class="btn" id="sch">＋ Schedule Match</button><button class="btn s" id="scr">👥 Manage Scorers</button>` : ""}<div id="ml"></div><div id="msg" class="msg"></div>`;
   $("#ft").onchange = e => { S.tour = e.target.value; matchList(); };
   $("#tm").onclick = () => { S.tab = "m"; list(); }; $("#tp").onclick = () => { S.tab = "p"; list(); };
   if ($("#ad")) $("#ad").onclick = login;
   if ($("#so")) $("#so").onclick = () => signOut(auth);
   if ($("#sch")) $("#sch").onclick = schedule;
+  if ($("#scr")) $("#scr").onclick = scorers;
   matchList();
 }
 function matchList(){
@@ -185,10 +188,78 @@ function matchList(){
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm("Delete this match?")) act(() => deleteDoc(ref(b.dataset.del))); });
 }
 
+// ---- ROLES: admin (can list scorers) / scorer (rights per tournament) ----
+async function role(u){
+  S.admin = false; S.tids = []; S.scorers = [];
+  if (!u) return;
+  try { S.scorers = (await getDocs(collection(db, "scorers"))).docs.map(d => ({id:d.id, ...d.data()})); S.admin = true; }
+  catch { try { const d = await getDoc(doc(db, "scorers", (u.email || "").toLowerCase())); S.tids = d.exists() ? d.data().tids || [] : []; } catch {} }
+}
+const canScore = m => S.admin || (S.tids || []).includes(m.tid);
+
+// ---- MANAGE SCORERS (admin only) ----
+function scorers(){
+  S.view = "scr"; S.stn = S.stn || S.tours[0].id;
+  const rows = (S.scorers || []).filter(x => (x.tids || []).includes(S.stn));
+  $("#app").innerHTML = `<div class="top"><h1 class="gold">Scorers</h1></div>
+    <label>Tournament</label><select id="sn">${S.tours.map(t => `<option value="${esc(t.id)}" ${t.id === S.stn ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+    <div class="xm"><h3>ADD SCORER</h3><label>Email</label><input id="se" type="text" autocomplete="off"><label>Password (leave blank if they already have an account)</label><input id="sp" type="password" autocomplete="new-password"><button class="btn" id="sa">Add Scorer</button></div>
+    ${rows.map((x, i) => `<div class="card" style="cursor:default"><div class="row"><b>${esc(x.id)}</b></div><button class="btn s sm" data-rs="${i}">Send reset email</button> <button class="btn s sm" data-rm="${i}">Remove</button></div>`).join("") || `<div class="mut c">No scorers in this tournament yet.</div>`}
+    <button class="btn s" id="bk">← Back</button><div id="msg" class="msg"></div>`;
+  $("#sn").onchange = e => { S.stn = e.target.value; scorers(); };
+  $("#bk").onclick = list;
+  $("#sa").onclick = () => act(async () => {
+    const em = $("#se").value.trim().toLowerCase(), pw = $("#sp").value, tid = $("#sn").value; let note = "Scorer added.";
+    if (!em.includes("@")) return flash("Enter a valid email.");
+    if (pw) {
+      if (pw.length < 6) return flash("Password must be at least 6 characters.");
+      try { const a2 = getAuth(getApps().find(a => a.name === "sec") || initializeApp(cfg, "sec")); await createUserWithEmailAndPassword(a2, em, pw); await signOut(a2); }
+      catch (e) { if (e.code === "auth/email-already-in-use") note = "Added — that email already had an account."; else throw e; }
+    }
+    await setDoc(doc(db, "scorers", em), {email:em, tids:arrayUnion(tid)}, {merge:true});
+    await role(auth.currentUser); scorers(); flash(note, true);
+  });
+  document.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { const x = rows[+b.dataset.rm]; if (confirm(`Remove ${x.id} from this tournament?`)) act(async () => { await updateDoc(doc(db, "scorers", x.id), {tids:arrayRemove(S.stn)}); await role(auth.currentUser); scorers(); }); });
+  document.querySelectorAll("[data-rs]").forEach(b => b.onclick = () => act(async () => { await sendPasswordResetEmail(auth, rows[+b.dataset.rs].id); flash("Reset email sent.", true); }));
+}
+
+// ---- MATCH SUMMARY ----
+function inn(h, cur){
+  const order = [], seen = new Set(), add = n => { if (n && !seen.has(n)) { seen.add(n); order.push(n); } };
+  h.forEach(x => { if (x.p) { add(x.p[0]); add(x.p[1]); } });
+  if (cur) { add(cur.s); add(cur.n); }
+  const outs = new Set(h.filter(x => x.w).map(x => x.s)), bw = [];
+  h.forEach(x => { if (x.o && !bw.includes(x.o)) bw.push(x.o); });
+  return {bats:order.map(n => { const [r, b] = bStat(h, n); return {n, r, b, out:outs.has(n)}; }), bows:bw.map(n => ({n, f:wStat(h, n)})),
+    wd:h.filter(x => x.e === "wd").reduce((a, x) => a + x.r, 0), nb:h.filter(x => x.e === "nb").length};
+}
+function summary(m){
+  const i = info(m), first = m.bat1 === 2 ? m.n2 : m.n1, second = m.bat1 === 2 ? m.n1 : m.n2;
+  const blk = (team, runs, w, balls, h, cur) => {
+    const d = inn(h, cur);
+    return `<div class="sm1"><div class="row"><b class="os">${esc(team)}</b><b class="os gold">${runs}/${w} <span class="mut">(${ovs(balls)} ov)</span></b></div>
+      ${d.bats.length ? `<table class="pt">${d.bats.map(x => `<tr><td>${esc(x.n)}${x.out ? "" : " *"}</td><td><b>${x.r}</b></td><td class="mut">${x.b}b</td></tr>`).join("")}</table>` : ""}
+      ${d.bows.length ? `<div class="mut" style="margin-top:6px">Bowling (O-R-W)</div><table class="pt">${d.bows.map(x => `<tr><td>${esc(x.n)}</td><td>${x.f}</td></tr>`).join("")}</table>` : ""}
+      <div class="mut" style="margin-top:6px">Extras: wides ${d.wd}, no-balls ${d.nb}</div></div>`;
+  };
+  return (i.done ? `<div class="res">🏆 ${esc(i.res.toUpperCase())}</div>` : "") +
+    (m.innings === 2 ? blk(first, m.inn1, m.inn1w ?? 0, m.inn1b ?? 0, m.hist1 || [], null) + blk(second, m.runs, i.w, m.balls, m.history, m.cur) : blk(first, m.runs, i.w, m.balls, m.history, m.cur));
+}
+function summaryText(m, link){
+  const i = info(m), first = m.bat1 === 2 ? m.n2 : m.n1, second = m.bat1 === 2 ? m.n1 : m.n2;
+  const L = [`🏏 ${m.n1} vs ${m.n2} — ${tname(m.tid)}`];
+  if (m.innings === 2) L.push(`${first}: ${m.inn1}/${m.inn1w ?? 0} (${ovs(m.inn1b ?? 0)})`, `${second}: ${m.runs}/${i.w} (${ovs(m.balls)})`);
+  else L.push(`${first}: ${m.runs}/${i.w} (${ovs(m.balls)})`);
+  L.push(i.done ? `🏆 ${i.res}` : "⏳ In progress");
+  const top = [...inn(m.hist1 || [], null).bats, ...inn(m.history, null).bats].sort((a, b) => b.r - a.r)[0];
+  if (top && top.r > 0) L.push(`⭐ Top score: ${top.n} ${top.r}(${top.b})`);
+  return L.join("\n") + "\n" + link;
+}
+
 // ---- ADMIN LOGIN ----
 function login(){
   S.view = "login";
-  $("#app").innerHTML = `<div class="top"><h1 class="gold">🔒 Admin</h1></div><label>Email</label><input id="ae" type="text" autocomplete="username"><label>Password</label><input id="ap" type="password" autocomplete="current-password">
+  $("#app").innerHTML = `<div class="top"><h1 class="gold">🔒 Sign In</h1></div><label>Email</label><input id="ae" type="text" autocomplete="username"><label>Password</label><input id="ap" type="password" autocomplete="current-password">
     <button class="btn" id="si">Sign In</button><button class="btn s" id="bk">← Back</button><div id="msg" class="msg"></div>`;
   const go = async () => {
     try { await signInWithEmailAndPassword(auth, $("#ae").value.trim(), $("#ap").value); list(); }
@@ -231,7 +302,7 @@ async function schedule(){
 
 // ---- MATCH (live view + scoring) ----
 function openMatch(id){
-  S.view = "match"; S.ex = false; S.sel = {1:[], 2:[]}; S.sub = {1:"", 2:""}; if (S.unsubM) S.unsubM();
+  S.view = "match"; S.ex = false; S.sel = {1:[], 2:[]}; S.sub = {1:"", 2:""}; S.sumOpen = undefined; if (S.unsubM) S.unsubM();
   S.unsubM = onSnapshot(ref(id), s => {
     if (!s.exists()) { $("#app").innerHTML = `<div class="msg">Match not found.</div><button class="btn s" id="bk">← Matches</button>`; $("#bk").onclick = list; return; }
     S.m = {...s.data(), id:s.id, history:s.data().history || []}; matchView();
@@ -267,7 +338,7 @@ const squadPick = (m, k) => {
 const sel = (id, arr) => `<select id="${id}">${arr.map(p => `<option>${esc(p)}</option>`).join("")}</select>`;
 
 function matchView(){
-  const m = S.m, i = info(m), A = S.admin, base = location.origin + location.pathname;
+  const m = S.m, i = info(m), A = canScore(m), base = location.origin + location.pathname;
   const view = base + "?match=" + m.id, ov = base + "?mode=overlay&match=" + m.id;
   const P = !!(m.pl1 && m.pl1.length), fi = m.bat1 === 2 ? 2 : 1, kb = i.inn === 1 ? fi : 3 - fi;
   const xiB = m["xi" + kb] || [], xiW = m["xi" + (3 - kb)] || [], c = m.cur;
@@ -302,6 +373,7 @@ function matchView(){
            <button class="btn" id="ex">ADD EXTRAS</button>`;
     } else if (A && i.done) h += `<button class="btn s" id="un">↩ Undo last ball</button>`;
     if (!i.done) h += `<div class="mut c">Live — updates automatically</div>`;
+    h += `<details id="sd" class="mut" style="margin-top:12px" ${(S.sumOpen ?? (m.status === "completed" || S.sumParam)) ? "open" : ""}><summary>📊 Match Summary</summary><div style="margin-top:8px">${summary(m)}<a class="btn s sm" style="margin-top:8px" target="_blank" href="https://wa.me/?text=${encodeURIComponent(summaryText(m, view + "&summary=1"))}">📲 Share Summary</a></div></details>`;
     if (m.xi1) h += `<details class="mut" style="margin-top:10px"><summary>Playing XIs &amp; 12th players</summary>${[1,2].map(k => `<div style="margin-top:6px"><b>${esc(m["n" + k])}</b>: ${esc((m["xi" + k] || []).join(", "))}<br>12th: ${esc(m["s" + k] || "–")}</div>`).join("")}</details>`;
   }
   if (A) h += `<button class="btn s" id="cp" style="margin-top:14px">📋 Copy Overlay Link</button><div class="mut c" style="word-break:break-all;font-size:11px">${esc(ov)}</div>`;
@@ -311,6 +383,7 @@ function matchView(){
   if (A && m.status === "live") lock();
   if ($("#pn")) $("#pn").selectedIndex = Math.min(1, $("#pn").options.length - 1);
   $("#bk").onclick = list;
+  if ($("#sd")) $("#sd").ontoggle = () => { S.sumOpen = $("#sd").open; };
   const on = (s, fn) => { const e = $(s); if (e) e.onclick = fn; };
   on("#st", () => {
     const u = {status:"live", bat1:+$("#bf").value, innings:1, runs:0, balls:0, history:[], cur:null};
@@ -355,8 +428,8 @@ function overlay(id){
 const q = new URLSearchParams(location.search), mid = (q.get("match") || "").trim().toUpperCase();
 if (q.get("mode") === "overlay") overlay(mid);
 else {
-  await auth.authStateReady(); S.admin = !!auth.currentUser;
-  onAuthStateChanged(auth, u => { S.admin = !!u; if (S.view === "list") list(); else if (S.view === "match" && S.m) matchView(); });
+  await auth.authStateReady(); await role(auth.currentUser); S.sumParam = q.get("summary") === "1";
+  onAuthStateChanged(auth, async u => { await role(u); if (S.view === "list") list(); else if (S.view === "match" && S.m) matchView(); });
   try { const t = await getDocs(collection(db, "tournaments")); S.tours = [S.tours[0], ...t.docs.map(d => ({id:d.id, name:d.data().name || d.id, at:d.data().created || 0})).sort((a, b) => a.at - b.at)]; } catch {}
   onSnapshot(collection(db, "matches"), s => { S.matches = s.docs.map(d => ({...d.data(), id:d.id})); if (S.view === "list") matchList(); });
   mid ? openMatch(mid) : list();
