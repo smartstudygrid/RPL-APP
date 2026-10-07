@@ -255,14 +255,15 @@ function admin(msg = "", cls = "ok"){
   document.body.classList.remove("sq");
   if (!adminOk()) { signOut(auth); return adminLogin(); }
   ss(AD_KEY, String(Date.now()));
+  const cur = S.atour || "default";
   $("#app").innerHTML = `
   <div class="th"><div><div class="tn gold">Admin Panel</div><div class="ts">Teams · Passwords · Locks</div></div></div>
   <div class="panel"><div class="ph">🏆 Create Tournament</div>
     <div class="row" style="border:none"><input type="text" id="tn" placeholder="Tournament name"><button class="btn sm auto" id="ct">Create</button></div></div>
   <div class="panel"><div class="ph">➕ Add Team / Login</div>
-    <div class="row"><select id="nto" style="width:200px">${S.tours.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select><input type="text" id="nt" placeholder="Team name"><input type="password" id="np" placeholder="Team password"><button class="btn sm auto" id="add">Add Team</button></div></div>
-  <div class="panel"><div class="ph">Teams (${S.teams.length})</div>
-    ${S.teams.map((t, i) => `<div class="row"><b>${t.locked ? "🔒" : "🔓"} ${esc(t.name)} <small style="opacity:.6">· ${esc((S.tours.find(x => x.id === t.tid) || {}).name || t.tid)}</small></b>
+    <div class="row"><select id="nto" style="width:200px">${S.tours.map(t => `<option value="${esc(t.id)}" ${t.id === cur ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select><input type="text" id="nt" placeholder="Team name"><input type="password" id="np" placeholder="Team password"><button class="btn sm auto" id="add">Add Team</button></div></div>
+  <div class="panel"><div class="ph">Teams (${S.teams.filter(t => t.tid === cur).length})</div>
+    ${S.teams.map((t, i) => t.tid !== cur ? "" : `<div class="row"><b>${t.locked ? "🔒" : "🔓"} ${esc(t.name)} <small style="opacity:.6">· ${esc((S.tours.find(x => x.id === t.tid) || {}).name || t.tid)}</small></b>
       <input type="password" data-pw="${i}" placeholder="New password">
       <button class="btn sm auto" data-act="pw" data-i="${i}">Set Password</button>
       <button class="btn sm sec auto" data-act="lock" data-i="${i}">${t.locked ? "Unlock" : "Lock"}</button>
@@ -276,6 +277,7 @@ function admin(msg = "", cls = "ok"){
   const run = async (fn, ok) => { try { await fn(); await loadTeams(); admin(ok, "ok"); } catch (e) { flash(e.message || "Error", "err"); } };
   const setAll = v => run(async () => { const b = writeBatch(db); S.teams.forEach(t => b.set(doc(db, COL, t.id), {is_locked:v}, {merge:true})); await b.commit(); }, v ? "All squads LOCKED." : "All squads UNLOCKED.");
   $("#hm").onclick = goHome;
+  $("#nto").onchange = () => { const n = $("#nt").value, p = $("#np").value; S.atour = $("#nto").value; admin(); $("#nt").value = n; $("#np").value = p; };
   $("#so").onclick = async () => { ss(AD_KEY, null); await signOut(auth); goHome(); };
   $("#ct").onclick = () => {
     const n = $("#tn").value.trim(), id = n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "t" + Date.now();
