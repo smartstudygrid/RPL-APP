@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Challenger's Cup</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Oswald:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:#fff;font-family:'Rajdhani',sans-serif;padding:0 16px 60px;
+background:radial-gradient(ellipse at 50% 100%,rgba(0,80,180,.25),transparent 60%),linear-gradient(180deg,#020818,#040d2a 40%,#061535 70%,#03100d) fixed}
+.wrap{max-width:1200px;margin:0 auto}
+.hdr{text-align:center;padding:22px 0 8px}
+.hdr .s{font:600 13px Oswald;letter-spacing:6px;color:#7ab3ff;text-transform:uppercase}
+.gold{font-family:Oswald;font-weight:700;text-transform:uppercase;background:linear-gradient(135deg,#c8a84b,#f5d073,#ffeea0,#f5d073,#c8a84b);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 14px rgba(200,168,75,.4))}
+.hdr .n{font-size:48px;line-height:1.1}
+.hdr .t{font-size:13px;letter-spacing:3px;color:rgba(200,200,220,.6)}
+.line{width:300px;max-width:80%;height:1px;background:linear-gradient(90deg,transparent,#c8a84b,transparent);margin:10px auto 0}
+.login{max-width:420px;margin:24px auto;padding:30px 28px;border:1px solid rgba(200,168,75,.3);border-radius:12px;background:rgba(255,255,255,.04);box-shadow:0 0 60px rgba(0,80,200,.15)}
+.lt{font:600 22px Oswald;color:#f5d073;text-align:center;letter-spacing:3px;margin-bottom:20px;text-transform:uppercase}
+label.l{display:block;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:rgba(200,210,255,.7);font-weight:600;margin:12px 0 4px}
+input[type=text],input[type=password],select{width:100%;background:rgba(0,20,60,.6);border:1px solid rgba(100,150,255,.25);color:#fff;border-radius:6px;font:600 15px Rajdhani;padding:9px 10px}
+input:focus,select:focus{outline:none;border-color:rgba(200,168,75,.6);box-shadow:0 0 12px rgba(200,168,75,.2)}
+select option{background:#061535}
+.btn{display:block;width:100%;margin-top:12px;cursor:pointer;border:none;border-radius:6px;padding:10px 20px;font:700 14px Oswald;letter-spacing:3px;text-transform:uppercase;background:linear-gradient(135deg,#c8a84b,#f5d073);color:#0a0a1a;transition:.2s}
+.btn:hover{box-shadow:0 0 20px rgba(245,208,115,.4);transform:translateY(-1px)}
+.btn.sec{background:transparent;color:#7ab3ff;border:1px solid rgba(100,160,255,.4);font-weight:600}
+.btn.auto{display:inline-block;width:auto;margin:0}
+.admin{font-size:12px;letter-spacing:3px;color:rgba(150,150,180,.6);text-transform:uppercase;text-align:center;margin:22px 0 4px}
+.msg{margin-top:10px;text-align:center;font-weight:700}.err{color:#ff7b7b}.ok{color:#6be58c}
+.th{display:flex;align-items:center;gap:20px;padding:12px 0 20px;border-bottom:1px solid rgba(200,168,75,.2);margin-bottom:20px}
+.logo{width:120px;height:120px;border-radius:50%;overflow:hidden;flex-shrink:0;background:rgba(0,20,60,.8);box-shadow:0 0 20px rgba(200,168,75,.3);border:2px dashed rgba(200,168,75,.3)}
+.logo.has{border:none}.logo img{width:100%;height:100%;object-fit:cover}
+.tn{font-size:36px;line-height:1.1}.ts{font-size:12px;letter-spacing:4px;color:rgba(150,180,255,.6);text-transform:uppercase;margin-top:4px}
+.lock{border:1px solid rgba(200,168,75,.4);background:rgba(200,168,75,.12);border-radius:6px;padding:8px;text-align:center;letter-spacing:3px;color:#c8a84b;text-transform:uppercase;margin-bottom:16px}
+.main{display:grid;grid-template-columns:3.8fr 1.2fr;gap:18px;align-items:start}
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.card{position:relative;margin:3px}
+.glow{position:absolute;inset:-3px;border-radius:10px;background:linear-gradient(135deg,#1a6fff,#00cfff,#0044cc);filter:blur(4px);animation:gp 3s ease-in-out infinite}
+@keyframes gp{0%,100%{opacity:.55}50%{opacity:1}}
+.inner{position:relative;background:linear-gradient(160deg,#0a1628,#060f20 60%,#0a1a10);border:1.5px solid rgba(100,180,255,.4);border-radius:8px;overflow:hidden}
+.img{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:rgba(5,15,30,.9);position:relative}
+.img img{width:100%;height:100%;object-fit:cover}
+.num{position:absolute;top:5px;left:6px;font:700 11px Oswald;color:rgba(200,168,75,.8);z-index:2}
+.nb{padding:5px 4px 6px;background:rgba(0,10,30,.95);border-top:1px solid rgba(100,180,255,.2);text-align:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nb.e{color:rgba(100,150,255,.4);font-size:11px;letter-spacing:2px}
+.cap .glow{background:linear-gradient(135deg,#c8a84b,#f5d073,#c8a84b);inset:-5px;animation-name:gp}
+.cap .inner{border:2px solid rgba(200,168,75,.6);background:linear-gradient(160deg,#0e1a08,#060f04 60%,#0a1a28)}
+.cl{font:400 11px Oswald;letter-spacing:5px;color:#c8a84b;text-align:center;padding:6px;background:rgba(0,30,10,.9);border-bottom:1px solid rgba(200,168,75,.25)}
+.cap .img{aspect-ratio:45/42}.cap .nb{font:700 16px Oswald;color:#f5d073;letter-spacing:2px;padding:8px 6px 10px}
+.ed{margin-top:4px}.ed input[type=text]{padding:4px 8px;font-size:13px}
+.up{display:block;margin-top:3px;text-align:center;cursor:pointer;font-size:12px;color:#f5d073;border:1px dashed rgba(200,168,75,.4);border-radius:4px;padding:2px;background:rgba(0,20,60,.3)}
+.up input{display:none}
+.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:22px;padding-top:16px;border-top:1px solid rgba(255,255,255,.12)}
+.bar .btn{margin:0}.sp{flex:1}
+.tg{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:2px;font-size:14px}
+.tg input{width:18px;height:18px;accent-color:#c8a84b}
+.badge{border:1px solid rgba(100,160,255,.35);border-radius:6px;padding:7px 14px;font-size:12px;letter-spacing:3px;color:#7ab3ff;text-transform:uppercase;background:rgba(100,160,255,.1)}
+.foot{position:fixed;bottom:8px;left:14px;font-size:11px;letter-spacing:2px;text-transform:uppercase;background:rgba(2,8,24,.7);padding:2px 6px;border-radius:4px}
+.foot a{color:#fff}.foot a:hover{color:#f5d073}
+@media(max-width:800px){.main{grid-template-columns:1fr}.grid{grid-template-columns:repeat(3,1fr)}.hdr .n{font-size:34px}.tn{font-size:26px}.logo{width:80px;height:80px}.cap{max-width:260px;margin:0 auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="s">&#9670; Season 18 2026 &#9670;</div>
+    <div class="n gold">Challenger's Cup</div>
+    <div class="t">BUILD YOUR SQUAD</div>
+    <div class="line"></div>
+  </div>
+  <div id="app"></div>
+</div>
+<div class="foot"><a href="https://www.smartstudygrid.com" target="_blank">www.smartstudygrid.com</a> &nbsp;|&nbsp; Created by Amanullah Khan &nbsp;|&nbsp; +966568959394</div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getFirestore,doc,getDoc,setDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ===== 1. PASTE YOUR FIREBASE CONFIG HERE =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDkGhScAIq0tkzEosWkScD0doTq9VyLaq4",
+  authDomain: "cricketscoreapp-fa258.firebaseapp.com",
+  projectId: "cricketscoreapp-fa258",
+  storageBucket: "cricketscoreapp-fa258.firebasestorage.app",
+  messagingSenderId: "833946397398",
+  appId: "1:833946397398:web:a14bba67a7e3cbab9d7777"
+};
+// SHA-256 hashes of the team / admin passwords (not plaintext)
+const TEAM_HASH  = "0086b0a2fd7337577f13ee53f8ea532160e1a682d2a874c3bb03ab568b3d4385";
+const ADMIN_HASH = "b480e8847b73883823645bae4a47fc58796b34a3276a7c2e369c8805b79536b6";
+const TEAMS = ["Gladiators YB","KHAN JEE","KAPTAN 11","Pak EAGLES","RCC","SWAT XI","Riyadh Stallions","Riyadh Strikers","Saudi German","Punjab XI","Riyadh Kings","Team Avengers"];
+const COL = "squads";
+
+const db = getFirestore(initializeApp(firebaseConfig));
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sha = async t => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2,"0")).join("");
+
+const S = {page:"home", team:null, viewOnly:false, edit:false, d:null, msg:""};
+
+function toB64(file, size=240){
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onerror = rej;
+    r.onload = () => {
+      const im = new Image();
+      im.onerror = rej;
+      im.onload = () => {
+        const k = Math.min(1, size / Math.max(im.width, im.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/jpeg", .75).split(",")[1]);
+      };
+      im.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+// ===== LOGIN =====
+function home(){
+  $("#app").innerHTML = `
+  <div class="login">
+    <div class="lt">⚡ Enter Your Squad</div>
+    <label class="l">Select Your Team</label>
+    <select id="team">${TEAMS.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+    <label class="l">Password</label>
+    <input type="password" id="pw" placeholder="Enter team password…">
+    <button class="btn" id="enter">Enter Dashboard</button>
+    <button class="btn sec" id="view">👁️ View Squad</button>
+    <div class="admin">🔒 League Admin</div>
+    <input type="password" id="ap" placeholder="Admin only…">
+    <div id="adm"></div>
+    <div class="msg" id="m">${S.msg}</div>
+  </div>`;
+  const m = (t, c) => { $("#m").className = "msg " + c; $("#m").textContent = t; };
+  $("#enter").onclick = async () => {
+    if (await sha($("#pw").value) === TEAM_HASH) openSquad($("#team").value, false);
+    else m("Incorrect password.", "err");
+  };
+  $("#view").onclick = () => openSquad($("#team").value, true);
+  $("#ap").oninput = async () => {
+    if (await sha($("#ap").value) !== ADMIN_HASH) { $("#adm").innerHTML = ""; return; }
+    $("#adm").innerHTML = `<div style="display:flex;gap:10px"><button class="btn" id="la">🔒 Lock All</button><button class="btn" id="ua">🔓 Unlock All</button></div>`;
+    const setAll = async v => {
+      try {
+        const b = writeBatch(db);
+        TEAMS.forEach(t => b.set(doc(db, COL, t), {team_name: t, is_locked: v}, {merge: true}));
+        await b.commit();
+        m(v ? "All squads LOCKED." : "All squads UNLOCKED.", "ok");
+      } catch (e) { m("Error: " + e.message, "err"); }
+    };
+    $("#la").onclick = () => setAll(true);
+    $("#ua").onclick = () => setAll(false);
+  };
+}
+
+async function openSquad(team, viewOnly){
+  $("#app").innerHTML = `<div class="msg">Loading…</div>`;
+  try {
+    const snap = await getDoc(doc(db, COL, team));
+    const x = snap.exists() ? snap.data() : {};
+    S.d = {
+      is_locked: !!x.is_locked,
+      names: Array.from({length:17}, (_, i) => (x.player_list || [])[i] || ""),
+      pics: x.squad_pics || {},
+      cap_name: x.captain_name || "",
+      cap_pic: x.cap_pic || null,
+      logo: x.team_logo || null
+    };
+  } catch (e) {
+    $("#app").innerHTML = `<div class="login"><div class="msg err">Connection error: ${esc(e.message)}</div><button class="btn sec" id="b">Back</button></div>`;
+    $("#b").onclick = home; return;
+  }
+  Object.assign(S, {page:"squad", team, viewOnly, edit:false, msg:""});
+  squad();
+}
+
+// ===== SQUAD =====
+function squad(){
+  const d = S.d, edit = S.edit && !S.viewOnly && !d.is_locked;
+  const up = (id) => edit ? `<label class="up">⬆<input type="file" accept="image/*" data-up="${id}"></label>` : "";
+  let cards = "";
+  for (let i = 0; i < 17; i++){
+    const p = d.pics[i];
+    cards += `<div><div class="card"><div class="glow"></div><div class="inner">
+      <div class="num">${i+1}</div>
+      <div class="img">${p ? `<img src="data:image/jpeg;base64,${p}">` : `<svg viewBox="0 0 24 24" fill="none" style="width:50%;opacity:.25"><circle cx="12" cy="8" r="4" stroke="#4060a0" stroke-width="1.5"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#4060a0" stroke-width="1.5" stroke-linecap="round"/></svg>`}</div>
+      ${d.names[i] ? `<div class="nb">${esc(d.names[i])}</div>` : `<div class="nb e">Player</div>`}
+    </div></div>
+    ${edit ? `<div class="ed"><input type="text" data-n="${i}" value="${esc(d.names[i])}" placeholder="Player ${i+1}">${up(i)}</div>` : ""}</div>`;
+  }
+  $("#app").innerHTML = `
+  <div class="th">
+    <div class="logo ${d.logo ? "has" : ""}">${d.logo ? `<img src="data:image/jpeg;base64,${d.logo}">` : ""}</div>
+    <div><div class="tn gold">${esc(S.team)}</div><div class="ts">Challenger's Cup · Season 18 2026</div></div>
+  </div>
+  ${d.is_locked && !S.viewOnly ? `<div class="lock">🔒 Squad is Locked</div>` : ""}
+  ${edit ? `<div style="margin-bottom:14px"><label class="l">Team Logo</label><label class="up" style="display:inline-block;padding:4px 14px">⬆ Upload logo<input type="file" accept="image/*" data-up="logo"></label></div>` : ""}
+  <div class="main">
+    <div class="grid">${cards}</div>
+    <div><div class="card cap"><div class="glow"></div><div class="inner">
+      <div class="cl">★ CAPTAIN ★</div>
+      <div class="num" style="top:36px;font-size:13px">18</div>
+      <div class="img">${d.cap_pic ? `<img src="data:image/jpeg;base64,${d.cap_pic}">` : `<svg viewBox="0 0 24 24" fill="none" style="width:45%;opacity:.25"><circle cx="12" cy="8" r="4" stroke="#c8a84b" stroke-width="1.5"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#c8a84b" stroke-width="1.5" stroke-linecap="round"/></svg>`}</div>
+      <div class="nb">${esc(d.cap_name || "Captain")}</div>
+    </div></div>
+    ${edit ? `<div class="ed"><input type="text" id="cn" value="${esc(d.cap_name)}" placeholder="Captain Name">${up("cap")}</div>` : ""}</div>
+  </div>
+  <div class="bar">
+    <button class="btn sec auto" id="home">🏠 Home</button>
+    ${S.viewOnly ? `<div class="badge">👁 View Only</div>` : `<label class="tg"><input type="checkbox" id="tg" ${edit ? "checked" : ""} ${d.is_locked ? "disabled" : ""}> ✏️ EDIT MODE</label>`}
+    <div class="sp"></div><div class="msg ${S.msg.startsWith("✅") ? "ok" : "err"}" style="margin:0">${S.msg}</div>
+    ${edit ? `<button class="btn auto" id="save">💾 Save All Changes</button>` : ""}
+  </div>`;
+
+  $("#home").onclick = () => { S.page = "home"; S.msg = ""; home(); };
+  if ($("#tg")) $("#tg").onchange = e => { S.edit = e.target.checked; S.msg = ""; squad(); };
+  document.querySelectorAll("[data-n]").forEach(el => el.oninput = () => d.names[+el.dataset.n] = el.value);
+  if ($("#cn")) $("#cn").oninput = e => d.cap_name = e.target.value;
+  document.querySelectorAll("[data-up]").forEach(el => el.onchange = async () => {
+    if (!el.files[0]) return;
+    try {
+      const b = await toB64(el.files[0], el.dataset.up === "logo" ? 300 : 240);
+      const k = el.dataset.up;
+      if (k === "logo") d.logo = b; else if (k === "cap") d.cap_pic = b; else d.pics[k] = b;
+      squad();
+    } catch { S.msg = "Could not read image."; squad(); }
+  });
+  if ($("#save")) $("#save").onclick = async () => {
+    $("#save").disabled = true; $("#save").textContent = "Saving…";
+    try {
+      await setDoc(doc(db, COL, S.team), {
+        team_name: S.team, captain_name: d.cap_name, player_list: d.names,
+        squad_pics: d.pics, cap_pic: d.cap_pic, team_logo: d.logo
+      }, {merge: true});
+      S.msg = "✅ Squad saved successfully!";
+    } catch (e) { S.msg = "Save failed: " + e.message; }
+    squad();
+  };
+}
+
+home();
+</script>
+</body>
+</html>
