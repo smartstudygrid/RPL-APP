@@ -58,6 +58,18 @@ select option{background:#061535}
 .badge{border:1px solid rgba(100,160,255,.35);border-radius:6px;padding:7px 14px;font-size:12px;letter-spacing:3px;color:#7ab3ff;text-transform:uppercase;background:rgba(100,160,255,.1)}
 .foot{position:fixed;bottom:8px;left:14px;font-size:11px;letter-spacing:2px;text-transform:uppercase;background:rgba(2,8,24,.7);padding:2px 6px;border-radius:4px}
 .foot a{color:#fff}.foot a:hover{color:#f5d073}
+.modal{position:fixed;inset:0;background:rgba(2,8,24,.9);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.mb{background:#061535;border:1px solid rgba(200,168,75,.4);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;align-items:center;max-width:360px;width:100%}
+.mt{font:600 16px Oswald;color:#f5d073;letter-spacing:2px;text-transform:uppercase}
+.cv{width:100%;max-width:300px;touch-action:none;cursor:grab;border:2px solid #c8a84b;border-radius:8px;background:#000}
+.cv.rc{border-radius:50%}
+.mb input[type=range]{width:100%;accent-color:#c8a84b}
+.hint{font-size:12px;color:rgba(200,210,255,.6);letter-spacing:1px}
+.panel{border:1px solid rgba(200,168,75,.3);border-radius:12px;background:rgba(255,255,255,.04);padding:16px 20px;margin-bottom:18px}
+.ph{font:600 16px Oswald;color:#f5d073;letter-spacing:3px;text-transform:uppercase;margin-bottom:6px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.row b{min-width:150px;flex:1}.row input{width:180px}
+.btn.sm{padding:8px 12px;font-size:12px;letter-spacing:1px}
 @media(max-width:800px){.main{grid-template-columns:1fr}.grid{grid-template-columns:repeat(3,1fr)}.hdr .n{font-size:34px}.tn{font-size:26px}.logo{width:80px;height:80px}.cap{max-width:260px;margin:0 auto}}
 </style>
 </head>
@@ -75,7 +87,7 @@ select option{background:#061535}
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,getDoc,setDoc,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,getDoc,getDocs,setDoc,deleteDoc,collection,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== 1. PASTE YOUR FIREBASE CONFIG HERE =====
 const firebaseConfig = {
@@ -89,7 +101,7 @@ const firebaseConfig = {
 // SHA-256 hashes of the team / admin passwords (not plaintext)
 const TEAM_HASH  = "0086b0a2fd7337577f13ee53f8ea532160e1a682d2a874c3bb03ab568b3d4385";
 const ADMIN_HASH = "b480e8847b73883823645bae4a47fc58796b34a3276a7c2e369c8805b79536b6";
-const TEAMS = ["Gladiators YB","KHAN JEE","KAPTAN 11","Pak EAGLES","RCC","SWAT XI","Riyadh Stallions","Riyadh Strikers","Saudi German","Punjab XI","Riyadh Kings","Team Avengers"];
+const DEFAULT_TEAMS = ["Gladiators YB","KHAN JEE","KAPTAN 11","Pak EAGLES","RCC","SWAT XI","Riyadh Stallions","Riyadh Strikers","Saudi German","Punjab XI","Riyadh Kings","Team Avengers"];
 const COL = "squads";
 
 const db = getFirestore(initializeApp(firebaseConfig));
@@ -97,35 +109,69 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sha = async t => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2,"0")).join("");
 
-const S = {page:"home", team:null, viewOnly:false, edit:false, d:null, msg:""};
+const S = {page:"home", team:null, viewOnly:false, edit:false, d:null, msg:"",teams:[],adminHash:null,seeded:false,err:""};
 
-function toB64(file, size=240){
+// ===== PHOTO CROPPER (drag + zoom) =====
+function crop(file, ratio, circle){
   return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onerror = rej;
-    r.onload = () => {
-      const im = new Image();
-      im.onerror = rej;
-      im.onload = () => {
-        const k = Math.min(1, size / Math.max(im.width, im.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
-        c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
-        res(c.toDataURL("image/jpeg", .75).split(",")[1]);
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onerror = () => { URL.revokeObjectURL(url); rej(); };
+    im.onload = () => {
+      const W = 300, H = Math.round(W / ratio);
+      const ov = document.createElement("div"); ov.className = "modal";
+      ov.innerHTML = `<div class="mb"><div class="mt">Frame face + shoulders</div>
+        <canvas width="${W}" height="${H}" class="cv ${circle ? "rc" : ""}"></canvas>
+        <input type="range" id="z" min="1" max="6" step="0.01" value="1">
+        <div class="hint">Drag to move · slider or scroll to zoom</div>
+        <div style="display:flex;gap:10px"><button class="btn sec auto" id="cx">Cancel</button><button class="btn auto" id="ck">Use photo</button></div></div>`;
+      document.body.append(ov);
+      const c = ov.querySelector("canvas"), g = c.getContext("2d"), zs = ov.querySelector("#z");
+      const base = Math.max(W / im.width, H / im.height);
+      let z = 1, x = 0, y = 0, drag = null;
+      const draw = () => {
+        const s = base * z, mx = (im.width * s - W) / 2, my = (im.height * s - H) / 2;
+        x = Math.max(-mx, Math.min(mx, x)); y = Math.max(-my, Math.min(my, y));
+        g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+        g.drawImage(im, W / 2 + x - im.width * s / 2, H / 2 + y - im.height * s / 2, im.width * s, im.height * s);
       };
-      im.src = r.result;
+      const done = v => { URL.revokeObjectURL(url); ov.remove(); res(v); };
+      zs.oninput = () => { z = +zs.value; draw(); };
+      c.onwheel = e => { e.preventDefault(); z = Math.min(6, Math.max(1, z - e.deltaY * .003)); zs.value = z; draw(); };
+      c.onpointerdown = e => { drag = [e.clientX, e.clientY]; c.setPointerCapture(e.pointerId); };
+      c.onpointermove = e => {
+        if (!drag) return;
+        const k = W / c.getBoundingClientRect().width;
+        x += (e.clientX - drag[0]) * k; y += (e.clientY - drag[1]) * k; drag = [e.clientX, e.clientY]; draw();
+      };
+      c.onpointerup = () => drag = null;
+      ov.querySelector("#cx").onclick = () => done(null);
+      ov.querySelector("#ck").onclick = () => done(c.toDataURL("image/jpeg", .72).split(",")[1]);
+      draw();
     };
-    r.readAsDataURL(file);
+    im.src = url;
   });
 }
 
-// ===== LOGIN =====
+// ===== TEAMS / LOGIN =====
+const fallback = () => DEFAULT_TEAMS.map(id => ({id, locked:false, pw:TEAM_HASH}));
+async function loadTeams(){
+  try {
+    const [snap, cfg] = await Promise.all([getDocs(collection(db, COL)), getDoc(doc(db, "config", "admin"))]);
+    S.teams = snap.docs.map(d => ({id:d.id, locked:!!d.data().is_locked, pw:d.data().pw_hash || TEAM_HASH})).sort((a, b) => a.id.localeCompare(b.id));
+    S.adminHash = cfg.exists() ? cfg.data().hash : ADMIN_HASH;
+    S.seeded = S.teams.length > 0;
+    if (!S.seeded) S.teams = fallback();
+    S.err = "";
+  } catch (e) { S.teams = fallback(); S.adminHash = ADMIN_HASH; S.err = e.message; }
+}
+const goHome = async () => { S.page = "home"; S.msg = ""; await loadTeams(); home(); };
+
 function home(){
   $("#app").innerHTML = `
   <div class="login">
     <div class="lt">⚡ Enter Your Squad</div>
     <label class="l">Select Your Team</label>
-    <select id="team">${TEAMS.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+    <select id="team">${S.teams.map(t => `<option>${esc(t.id)}</option>`).join("")}</select>
     <label class="l">Password</label>
     <input type="password" id="pw" placeholder="Enter team password…">
     <button class="btn" id="enter">Enter Dashboard</button>
@@ -133,28 +179,77 @@ function home(){
     <div class="admin">🔒 League Admin</div>
     <input type="password" id="ap" placeholder="Admin only…">
     <div id="adm"></div>
-    <div class="msg" id="m">${S.msg}</div>
+    <div class="msg err" id="m">${esc(S.err)}</div>
   </div>`;
-  const m = (t, c) => { $("#m").className = "msg " + c; $("#m").textContent = t; };
+  const m = t => { $("#m").textContent = t; };
   $("#enter").onclick = async () => {
-    if (await sha($("#pw").value) === TEAM_HASH) openSquad($("#team").value, false);
-    else m("Incorrect password.", "err");
+    const t = S.teams.find(x => x.id === $("#team").value);
+    if (t && await sha($("#pw").value) === t.pw) openSquad(t.id, false); else m("Incorrect password.");
   };
   $("#view").onclick = () => openSquad($("#team").value, true);
   $("#ap").oninput = async () => {
-    if (await sha($("#ap").value) !== ADMIN_HASH) { $("#adm").innerHTML = ""; return; }
-    $("#adm").innerHTML = `<div style="display:flex;gap:10px"><button class="btn" id="la">🔒 Lock All</button><button class="btn" id="ua">🔓 Unlock All</button></div>`;
-    const setAll = async v => {
-      try {
-        const b = writeBatch(db);
-        TEAMS.forEach(t => b.set(doc(db, COL, t), {team_name: t, is_locked: v}, {merge: true}));
-        await b.commit();
-        m(v ? "All squads LOCKED." : "All squads UNLOCKED.", "ok");
-      } catch (e) { m("Error: " + e.message, "err"); }
-    };
-    $("#la").onclick = () => setAll(true);
-    $("#ua").onclick = () => setAll(false);
+    const ok = await sha($("#ap").value) === S.adminHash;
+    $("#adm").innerHTML = ok ? `<button class="btn" id="oa">⚙️ Open Admin Panel</button>` : "";
+    if (ok) $("#oa").onclick = openAdmin;
   };
+}
+
+// ===== ADMIN PANEL =====
+async function openAdmin(){
+  $("#app").innerHTML = `<div class="msg">Loading…</div>`;
+  if (!S.seeded) {
+    try {
+      const b = writeBatch(db);
+      DEFAULT_TEAMS.forEach(t => b.set(doc(db, COL, t), {team_name:t, pw_hash:TEAM_HASH, is_locked:false}, {merge:true}));
+      await b.commit(); S.seeded = true;
+    } catch (e) { S.err = e.message; }
+  }
+  await loadTeams(); admin(S.err, "err");
+}
+function admin(msg = "", cls = "ok"){
+  $("#app").innerHTML = `
+  <div class="th"><div><div class="tn gold">Admin Panel</div><div class="ts">Teams · Passwords · Locks</div></div></div>
+  <div class="panel"><div class="ph">➕ Add Team / Login</div>
+    <div class="row"><input type="text" id="nt" placeholder="Team name"><input type="password" id="np" placeholder="Team password"><button class="btn sm auto" id="add">Add Team</button></div></div>
+  <div class="panel"><div class="ph">Teams (${S.teams.length})</div>
+    ${S.teams.map((t, i) => `<div class="row"><b>${t.locked ? "🔒" : "🔓"} ${esc(t.id)}</b>
+      <input type="password" data-pw="${i}" placeholder="New password">
+      <button class="btn sm auto" data-act="pw" data-i="${i}">Set Password</button>
+      <button class="btn sm sec auto" data-act="lock" data-i="${i}">${t.locked ? "Unlock" : "Lock"}</button>
+      <button class="btn sm sec auto" data-act="view" data-i="${i}">View</button>
+      <button class="btn sm sec auto" data-act="del" data-i="${i}" style="color:#ff7b7b;border-color:#ff7b7b66">Delete</button></div>`).join("")}
+    <div class="row" style="border:none"><button class="btn sm auto" id="lall">🔒 Lock All</button><button class="btn sm auto" id="uall">🔓 Unlock All</button></div></div>
+  <div class="panel"><div class="ph">Change Admin Password</div>
+    <div class="row" style="border:none"><input type="password" id="nap" placeholder="New admin password"><button class="btn sm auto" id="cap">Change</button></div></div>
+  <div class="bar"><button class="btn sec auto" id="hm">🏠 Home</button><div class="msg ${cls}" id="am" style="margin:0">${esc(msg)}</div></div>`;
+  const flash = (t, c) => { $("#am").className = "msg " + c; $("#am").textContent = t; };
+  const run = async (fn, ok) => { try { await fn(); await loadTeams(); admin(ok, "ok"); } catch (e) { flash(e.message || "Error", "err"); } };
+  const setAll = v => run(async () => { const b = writeBatch(db); S.teams.forEach(t => b.set(doc(db, COL, t.id), {is_locked:v}, {merge:true})); await b.commit(); }, v ? "All squads LOCKED." : "All squads UNLOCKED.");
+  $("#hm").onclick = goHome;
+  $("#lall").onclick = () => setAll(true);
+  $("#uall").onclick = () => setAll(false);
+  $("#add").onclick = () => {
+    const n = $("#nt").value.trim(), p = $("#np").value;
+    if (!n || n.includes("/") || n === "." || n === "..") return flash("Enter a valid team name (no slashes).", "err");
+    if (p.length < 4) return flash("Password must be at least 4 characters.", "err");
+    if (S.teams.some(t => t.id.toLowerCase() === n.toLowerCase())) return flash("That team already exists.", "err");
+    run(async () => setDoc(doc(db, COL, n), {team_name:n, pw_hash:await sha(p), is_locked:false, player_list:Array(17).fill(""), squad_pics:{}, captain_name:"", cap_pic:null, team_logo:null}), `Team "${n}" added.`);
+  };
+  $("#cap").onclick = () => {
+    const p = $("#nap").value;
+    if (p.length < 6) return flash("Admin password must be at least 6 characters.", "err");
+    run(async () => setDoc(doc(db, "config", "admin"), {hash:await sha(p)}), "Admin password changed.");
+  };
+  document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
+    const t = S.teams[+b.dataset.i], a = b.dataset.act;
+    if (a === "pw") {
+      const p = document.querySelector(`[data-pw="${b.dataset.i}"]`).value;
+      if (p.length < 4) return flash("Password must be at least 4 characters.", "err");
+      run(async () => setDoc(doc(db, COL, t.id), {pw_hash:await sha(p)}, {merge:true}), `Password updated for ${t.id}.`);
+    } else if (a === "lock") run(() => setDoc(doc(db, COL, t.id), {is_locked:!t.locked}, {merge:true}), `${t.id} ${t.locked ? "unlocked" : "locked"}.`);
+    else if (a === "view") openSquad(t.id, true);
+    else if (confirm(`Delete "${t.id}" and its whole squad?`)) run(() => deleteDoc(doc(db, COL, t.id)), `${t.id} deleted.`);
+  });
 }
 
 async function openSquad(team, viewOnly){
@@ -216,15 +311,17 @@ function squad(){
     ${edit ? `<button class="btn auto" id="save">💾 Save All Changes</button>` : ""}
   </div>`;
 
-  $("#home").onclick = () => { S.page = "home"; S.msg = ""; home(); };
+  $("#home").onclick = goHome;
   if ($("#tg")) $("#tg").onchange = e => { S.edit = e.target.checked; S.msg = ""; squad(); };
   document.querySelectorAll("[data-n]").forEach(el => el.oninput = () => d.names[+el.dataset.n] = el.value);
   if ($("#cn")) $("#cn").oninput = e => d.cap_name = e.target.value;
   document.querySelectorAll("[data-up]").forEach(el => el.onchange = async () => {
     if (!el.files[0]) return;
     try {
-      const b = await toB64(el.files[0], el.dataset.up === "logo" ? 300 : 240);
       const k = el.dataset.up;
+      const b = await crop(el.files[0], k === "cap" ? 45 / 42 : 1, k === "logo");
+      el.value = "";
+      if (!b) return;
       if (k === "logo") d.logo = b; else if (k === "cap") d.cap_pic = b; else d.pics[k] = b;
       squad();
     } catch { S.msg = "Could not read image."; squad(); }
@@ -242,6 +339,7 @@ function squad(){
   };
 }
 
+await loadTeams();
 home();
 </script>
 </body>
