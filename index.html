@@ -75,10 +75,23 @@ select option{background:#061535}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 .row b{min-width:150px;flex:1}.row input{width:180px}
 .btn.sm{padding:8px 12px;font-size:12px;letter-spacing:1px}
+.vt{display:none;position:fixed;left:0;top:0;bottom:0;width:48px;align-items:center;justify-content:center;border-right:1px solid rgba(200,168,75,.25);background:linear-gradient(90deg,rgba(0,20,60,.7),transparent);z-index:5}
+.vt span{writing-mode:vertical-rl;transform:rotate(180deg);font-size:28px;letter-spacing:8px;white-space:nowrap;max-height:96vh;overflow:hidden;line-height:1.2}
+body.sq{padding:0 16px 40px 64px}
+body.sq .vt{display:flex}
+body.sq .hdr{display:none}
+body.sq .th{padding:8px 0 10px;margin-bottom:10px}
+body.sq .logo{width:72px;height:72px}
+body.sq .tn{font-size:28px}
+body.sq .bar{margin-top:12px;padding-top:10px}
+body.sq .wrap{max-width:none}
+@media(min-width:801px){body.sq .main{max-width:max(560px,calc((200vh - 612px)*1.316 + 18px));margin:0 auto}}
+@media(max-width:800px){body.sq{padding-left:16px}.vt{display:none!important}body.sq .hdr{display:block}}
 @media(max-width:800px){.main{grid-template-columns:1fr}.grid{grid-template-columns:repeat(3,1fr)}.hdr .n{font-size:34px}.tn{font-size:26px}.logo{width:80px;height:80px}.cap{max-width:260px;margin:0 auto}}
 </style>
 </head>
 <body>
+<div class="vt"><span class="gold" id="vts"></span></div>
 <div class="wrap">
   <div class="hdr">
     <div class="s">&#9670; Season 18 2026 &#9670;</div>
@@ -173,6 +186,7 @@ async function loadTeams(){
 const goHome = async () => { S.page = "home"; S.msg = ""; await loadTeams(); home(); };
 
 function home(){
+  document.body.classList.remove("sq");
   $("#app").innerHTML = `
   <div class="login">
     <div class="lt">⚡ Enter Your Squad</div>
@@ -203,6 +217,7 @@ const AD_KEY = "ad_ok", FAIL_KEY = "ad_fail", TTL = 30 * 60 * 1000;
 const ss = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch {} };
 const adminOk = () => Date.now() - (+ss(AD_KEY) || 0) < TTL;
 function adminLogin(){
+  document.body.classList.remove("sq");
   $("#app").innerHTML = `<div class="login"><div class="lt">🔒 League Admin</div>
     <label class="l">Admin Password</label>
     <input type="password" id="ap" placeholder="Enter admin password…">
@@ -235,6 +250,7 @@ async function openAdmin(){
   await loadTeams(); admin(S.err, "err");
 }
 function admin(msg = "", cls = "ok"){
+  document.body.classList.remove("sq");
   if (!adminOk()) return adminLogin();
   ss(AD_KEY, String(Date.now()));
   $("#app").innerHTML = `
@@ -369,6 +385,7 @@ async function downloadImg(){
 
 // ===== SQUAD =====
 function squad(){
+  document.body.classList.add("sq"); $("#vts").textContent = S.tour;
   const d = S.d, edit = S.edit && !S.viewOnly && !d.is_locked;
   const up = (id) => edit ? `<label class="up">📷 ${(id === "cap" ? d.cap_pic : d.pics[id]) ? "Change" : "Add"} Photo<input type="file" accept="image/*" data-up="${id}"></label>` : "";
   let cards = "";
@@ -384,7 +401,7 @@ function squad(){
   $("#app").innerHTML = `
   <div class="th">
     <div class="logo ${d.logo ? "has" : ""}">${d.logo ? `<img src="data:image/jpeg;base64,${d.logo}">` : ""}</div>
-    <div><div class="tn gold">${esc(S.tname)}</div><div class="ts">${esc(S.tour)} · Season 18 2026</div></div>
+    <div><div class="tn gold">${esc(S.tname)}</div><div class="ts">Season 18 2026</div></div>
   </div>
   ${d.is_locked && !S.viewOnly ? `<div class="lock">🔒 Squad is Locked</div>` : ""}
   ${edit ? `<div style="margin-bottom:14px"><label class="l">Team Logo</label><label class="up" style="display:inline-flex;padding:7px 18px">📷 ${d.logo ? "Change" : "Upload"} Logo<input type="file" accept="image/*" data-up="logo"></label></div>` : ""}
