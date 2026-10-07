@@ -179,9 +179,7 @@ function home(){
     <input type="password" id="pw" placeholder="Enter team password…">
     <button class="btn" id="enter">Enter Dashboard</button>
     <button class="btn sec" id="view">👁️ View Squad</button>
-    <div class="admin">🔒 League Admin</div>
-    <input type="password" id="ap" placeholder="Admin only…">
-    <div id="adm"></div>
+    <button class="btn sec" id="adl" style="margin-top:22px">🔒 League Admin</button>
     <div class="msg err" id="m">${esc(S.err)}</div>
   </div>`;
   const m = t => { $("#m").textContent = t; };
@@ -192,11 +190,31 @@ function home(){
     if (t && await sha($("#pw").value) === t.pw) openSquad(t.id, false); else m("Incorrect password.");
   };
   $("#view").onclick = () => { if ($("#team").value) openSquad($("#team").value, true); };
-  $("#ap").oninput = async () => {
-    const ok = await sha($("#ap").value) === S.adminHash;
-    $("#adm").innerHTML = ok ? `<button class="btn" id="oa">⚙️ Open Admin Panel</button>` : "";
-    if (ok) $("#oa").onclick = openAdmin;
+  $("#adl").onclick = () => adminOk() ? openAdmin() : adminLogin();
+}
+
+// ===== ADMIN SIGN-IN (separate screen, lockout after failures, 30-min session) =====
+const AD_KEY = "ad_ok", FAIL_KEY = "ad_fail", TTL = 30 * 60 * 1000;
+const ss = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch {} };
+const adminOk = () => Date.now() - (+ss(AD_KEY) || 0) < TTL;
+function adminLogin(){
+  $("#app").innerHTML = `<div class="login"><div class="lt">🔒 League Admin</div>
+    <label class="l">Admin Password</label>
+    <input type="password" id="ap" placeholder="Enter admin password…">
+    <button class="btn" id="si">Sign In</button>
+    <button class="btn sec" id="bk">← Back</button>
+    <div class="msg err" id="m"></div></div>`;
+  const m = t => { $("#m").textContent = t; };
+  const go = async () => {
+    const f = JSON.parse(ss(FAIL_KEY) || '{"n":0,"until":0}'), wait = Math.ceil((f.until - Date.now()) / 1000);
+    if (wait > 0) return m(`Too many attempts. Try again in ${wait}s.`);
+    if (await sha($("#ap").value) === S.adminHash) { ss(FAIL_KEY, null); ss(AD_KEY, String(Date.now())); return openAdmin(); }
+    f.n++; if (f.n >= 3) f.until = Date.now() + Math.min(300, 15 * 2 ** (f.n - 3)) * 1000;
+    ss(FAIL_KEY, JSON.stringify(f)); $("#ap").value = ""; m("Incorrect password.");
   };
+  $("#bk").onclick = goHome; $("#si").onclick = go;
+  $("#ap").onkeydown = e => { if (e.key === "Enter") go(); };
+  $("#ap").focus();
 }
 
 // ===== ADMIN PANEL =====
@@ -212,6 +230,8 @@ async function openAdmin(){
   await loadTeams(); admin(S.err, "err");
 }
 function admin(msg = "", cls = "ok"){
+  if (!adminOk()) return adminLogin();
+  ss(AD_KEY, String(Date.now()));
   $("#app").innerHTML = `
   <div class="th"><div><div class="tn gold">Admin Panel</div><div class="ts">Teams · Passwords · Locks</div></div></div>
   <div class="panel"><div class="ph">🏆 Create Tournament</div>
@@ -227,12 +247,13 @@ function admin(msg = "", cls = "ok"){
       <button class="btn sm sec auto" data-act="del" data-i="${i}" style="color:#ff7b7b;border-color:#ff7b7b66">Delete</button></div>`).join("")}
     <div class="row" style="border:none"><button class="btn sm auto" id="lall">🔒 Lock All</button><button class="btn sm auto" id="uall">🔓 Unlock All</button></div></div>
   <div class="panel"><div class="ph">Change Admin Password</div>
-    <div class="row" style="border:none"><input type="password" id="nap" placeholder="New admin password"><button class="btn sm auto" id="cap">Change</button></div></div>
-  <div class="bar"><button class="btn sec auto" id="hm">🏠 Home</button><div class="msg ${cls}" id="am" style="margin:0">${esc(msg)}</div></div>`;
+    <div class="row" style="border:none"><input type="password" id="oap" placeholder="Current admin password"><input type="password" id="nap" placeholder="New admin password"><button class="btn sm auto" id="cap">Change</button></div></div>
+  <div class="bar"><button class="btn sec auto" id="hm">🏠 Home</button><button class="btn sec auto" id="so">Sign Out</button><div class="msg ${cls}" id="am" style="margin:0">${esc(msg)}</div></div>`;
   const flash = (t, c) => { $("#am").className = "msg " + c; $("#am").textContent = t; };
   const run = async (fn, ok) => { try { await fn(); await loadTeams(); admin(ok, "ok"); } catch (e) { flash(e.message || "Error", "err"); } };
   const setAll = v => run(async () => { const b = writeBatch(db); S.teams.forEach(t => b.set(doc(db, COL, t.id), {is_locked:v}, {merge:true})); await b.commit(); }, v ? "All squads LOCKED." : "All squads UNLOCKED.");
   $("#hm").onclick = goHome;
+  $("#so").onclick = () => { ss(AD_KEY, null); goHome(); };
   $("#ct").onclick = () => {
     const n = $("#tn").value.trim(), id = n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "t" + Date.now();
     if (!n || id === "default") return flash("Enter a valid tournament name.", "err");
@@ -249,8 +270,9 @@ function admin(msg = "", cls = "ok"){
     if (S.teams.some(t => t.id.toLowerCase() === did.toLowerCase())) return flash("That team already exists in this tournament.", "err");
     run(async () => setDoc(doc(db, COL, did), {team_name:n, tournament:tid, pw_hash:await sha(p), is_locked:false, player_list:Array(17).fill(""), squad_pics:{}, captain_name:"", cap_pic:null, team_logo:null}), `Team "${n}" added.`);
   };
-  $("#cap").onclick = () => {
+  $("#cap").onclick = async () => {
     const p = $("#nap").value;
+    if (await sha($("#oap").value) !== S.adminHash) return flash("Current admin password is incorrect.", "err");
     if (p.length < 6) return flash("Admin password must be at least 6 characters.", "err");
     run(async () => setDoc(doc(db, "config", "admin"), {hash:await sha(p)}), "Admin password changed.");
   };
