@@ -30,7 +30,18 @@ select option{background:#0b111c}
 .badge.live{background:#d93535;animation:p 1.4s infinite}.badge.scheduled{background:#1f4f9a}.badge.completed{background:#3a3f4a}
 @keyframes p{50%{opacity:.55}}
 .tk{position:relative;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(180deg,#24282c,#0f1113);border:1.5px solid #3c4045;border-radius:14px;padding:8px 14px;margin:10px 0;overflow:hidden;box-shadow:0 10px 20px rgba(0,0,0,.6)}
-.tk.ov{position:fixed;left:14px;bottom:14px;margin:0;display:inline-flex;gap:12px;padding:8px 18px}
+.tk.ov{margin:0;display:inline-flex;gap:12px;padding:8px 18px}
+.ovw{position:fixed;left:14px;bottom:14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.pl{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;background:linear-gradient(180deg,#1b2027,#0d0f12);border:1.5px solid #3c4045;border-radius:10px;padding:6px 14px;margin:0 0 10px;font:600 15px Oswald;text-transform:uppercase}
+.ovw .pl{margin:0}.pl b{color:var(--g)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.chip{background:rgba(0,20,60,.6);border:1.5px solid rgba(100,150,255,.3);color:#fff;border-radius:16px;padding:6px 12px;font:600 14px 'Roboto Condensed';cursor:pointer}
+.chip.on{background:linear-gradient(135deg,#c8a84b,#f5d073);color:#0a0a1a;border-color:#f5d073}
+.tabs{display:flex;gap:8px;margin:4px 0 8px}.btn.sm.on{background:linear-gradient(135deg,#c8a84b,#f5d073);color:#0a0a1a}
+table.pt{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+.pt th{font:600 11px Oswald;letter-spacing:1px;color:#c3a469;text-align:center;padding:6px 3px}
+.pt td{text-align:center;padding:8px 3px;border-top:1px solid rgba(255,255,255,.08)}
+.pt td:first-child,.pt th:first-child{text-align:left}.pt b{color:var(--g)}
 .gb{position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#ffb700,#c38400)}
 .tk u{width:3px;height:36px;background:linear-gradient(180deg,#7f8285,#3a3c3e,#7f8285);margin:0 4px;opacity:.8}
 .tc{display:flex;flex-direction:column;align-items:center;text-align:center;flex:1}
@@ -72,7 +83,7 @@ const app = initializeApp({
 });
 const db = getFirestore(app), auth = getAuth(app);
 
-const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:""};
+const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:"", tab:"m", sel:{1:[],2:[]}, sub:{1:"",2:""}};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const wk = m => (m.history || []).filter(x => x.w).length;
@@ -111,6 +122,36 @@ function ticker(m, ov){
     <div class="tc"><div class="mx">(${String(m.overs).padStart(2, "0")})</div></div>${chase}</div>`;
 }
 
+// ---- player stats (derived from ball history) ----
+const bStat = (h, n) => { let r = 0, b = 0; h.forEach(x => { if (x.s === n) { r += x.br || 0; if (x.e !== "wd") b++; } }); return [r, b]; };
+const wStat = (h, n) => { let r = 0, b = 0, w = 0; h.forEach(x => { if (x.o === n) { r += x.r; b += x.b; w += x.w; } }); return `${Math.floor(b / 6)}.${b % 6}-${r}-${w}`; };
+function players(m){
+  const c = m.cur; if (!c || (!c.s && !c.n && !c.b) || info(m).done) return "";
+  const st = n => { if (!n) return ""; const [r, b] = bStat(m.history, n); return `<span>${n === c.s ? "▶ " : ""}<b>${esc(n)}</b> ${r}(${b})</span>`; };
+  return `<div class="pl">${st(c.s)}${st(c.n)}${c.b ? `<span>⚾ <b>${esc(c.b)}</b> ${wStat(m.history, c.b)}</span>` : ""}</div>`;
+}
+
+// ---- points table ----
+function points(){
+  if (!S.tour) return `<div class="mut c" style="margin:24px 0">Select a tournament above.</div>`;
+  const T = {}, row = (id, n) => T[id] ??= {n, p:0, w:0, l:0, t:0, pts:0, rf:0, bf:0, ra:0, ba:0};
+  const ms = S.matches.filter(m => m.tid === S.tour);
+  ms.forEach(m => { row(m.t1, m.n1); row(m.t2, m.n2); });
+  ms.filter(m => m.status === "completed").forEach(m => {
+    const f = m.bat1 === 2 ? 2 : 1, a = row(f === 1 ? m.t1 : m.t2), b = row(f === 1 ? m.t2 : m.t1);
+    a.p++; b.p++;
+    if (m.runs > m.inn1) { b.w++; a.l++; b.pts += 2; } else if (m.runs < m.inn1) { a.w++; b.l++; a.pts += 2; } else { a.t++; b.t++; a.pts++; b.pts++; }
+    if (m.inn1b != null) {
+      const mb = m.overs * 6, ab = m.inn1w >= 10 ? mb : m.inn1b, bb = (m.history || []).filter(x => x.w).length >= 10 ? mb : m.balls;
+      a.rf += m.inn1; a.bf += ab; a.ra += m.runs; a.ba += bb; b.rf += m.runs; b.bf += bb; b.ra += m.inn1; b.ba += ab;
+    }
+  });
+  const nrr = x => x.bf && x.ba ? x.rf / (x.bf / 6) - x.ra / (x.ba / 6) : null;
+  const rows = Object.values(T).sort((a, b) => b.pts - a.pts || (nrr(b) ?? -99) - (nrr(a) ?? -99));
+  if (!rows.length) return `<div class="mut c" style="margin:24px 0">No teams in this tournament yet.</div>`;
+  return `<table class="pt"><tr><th>TEAM</th><th>P</th><th>W</th><th>L</th><th>T</th><th>NRR</th><th>PTS</th></tr>${rows.map(x => `<tr><td>${esc(x.n)}</td><td>${x.p}</td><td>${x.w}</td><td>${x.l}</td><td>${x.t}</td><td>${nrr(x) == null ? "–" : (nrr(x) > 0 ? "+" : "") + nrr(x).toFixed(3)}</td><td><b>${x.pts}</b></td></tr>`).join("")}</table><div class="mut c" style="margin-top:8px">Win = 2 pts · Tie = 1 pt</div>`;
+}
+
 // ---- wake lock (keeps screen on while scoring) ----
 let wl; const lock = async () => { try { wl = await navigator.wakeLock.request("screen"); } catch {} };
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.view === "match" && S.admin) lock(); });
@@ -120,8 +161,10 @@ function list(){
   S.view = "list"; S.ex = false; if (S.unsubM) S.unsubM();
   $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Cricket Scorer</h1>${S.admin ? `<button class="btn s sm" id="so">Sign Out</button>` : `<button class="btn s sm" id="ad">Admin</button>`}</div>
     <select id="ft"><option value="">All tournaments</option>${S.tours.map(t => `<option value="${esc(t.id)}" ${t.id === S.tour ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+    <div class="tabs"><button class="btn s sm ${S.tab === "m" ? "on" : ""}" id="tm">Matches</button><button class="btn s sm ${S.tab === "p" ? "on" : ""}" id="tp">Points Table</button></div>
     ${S.admin ? `<button class="btn" id="sch">＋ Schedule Match</button>` : ""}<div id="ml"></div><div id="msg" class="msg"></div>`;
   $("#ft").onchange = e => { S.tour = e.target.value; matchList(); };
+  $("#tm").onclick = () => { S.tab = "m"; list(); }; $("#tp").onclick = () => { S.tab = "p"; list(); };
   if ($("#ad")) $("#ad").onclick = login;
   if ($("#so")) $("#so").onclick = () => signOut(auth);
   if ($("#sch")) $("#sch").onclick = schedule;
@@ -129,6 +172,7 @@ function list(){
 }
 function matchList(){
   if (!$("#ml")) return;
+  if (S.tab === "p") { $("#ml").innerHTML = points(); return; }
   const ms = S.matches.filter(m => !S.tour || m.tid === S.tour).sort((a, b) => (a.when || 0) - (b.when || 0));
   $("#ml").innerHTML = ms.map(m => {
     const i = info({...m, history:m.history || []});
@@ -158,7 +202,7 @@ function login(){
 async function schedule(){
   S.view = "sch"; $("#app").innerHTML = `<div class="mut c">Loading teams…</div>`;
   try {
-    if (!S.squads) { const sn = await getDocs(collection(db, "squads")); S.squads = sn.docs.map(d => ({id:d.id, name:d.data().team_name || d.id, tid:d.data().tournament || "default"})); }
+    if (!S.squads) { const sn = await getDocs(collection(db, "squads")); S.squads = sn.docs.map(d => ({id:d.id, name:d.data().team_name || d.id, tid:d.data().tournament || "default", cap:d.data().captain_name || "", pl:[...new Set([d.data().captain_name, ...(d.data().player_list || [])].filter(Boolean))]})); }
   } catch (e) { $("#app").innerHTML = `<div class="msg">${esc(e.message)}</div><button class="btn s" id="bk">← Back</button>`; $("#bk").onclick = list; return; }
   const now = new Date(Date.now() - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
   $("#app").innerHTML = `<div class="top"><h1 class="gold">Schedule Match</h1></div>
@@ -176,10 +220,10 @@ async function schedule(){
   $("#sv").onclick = () => {
     const tid = $("#stn").value, t1 = $("#ta").value, t2 = $("#tb").value;
     if (!t1 || !t2 || t1 === t2) return flash("Pick two different teams.");
-    const nm = id => S.squads.find(t => t.id === id).name;
+    const sq = id => S.squads.find(t => t.id === id), nm = id => sq(id).name;
     const id = Array.from({length:6}, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.random() * 32 | 0]).join("");
     act(async () => {
-      await setDoc(ref(id), {tid, t1, t2, n1:nm(t1), n2:nm(t2), overs:+$("#ov").value || 10, when:new Date($("#dt").value).getTime() || Date.now(), venue:$("#vn").value.trim(), status:"scheduled", bat1:null, innings:1, runs:0, balls:0, history:[], inn1:0, inn1w:0, created:Date.now()});
+      await setDoc(ref(id), {tid, t1, t2, n1:nm(t1), n2:nm(t2), pl1:sq(t1).pl, pl2:sq(t2).pl, c1:sq(t1).cap, c2:sq(t2).cap, overs:+$("#ov").value || 10, when:new Date($("#dt").value).getTime() || Date.now(), venue:$("#vn").value.trim(), status:"scheduled", bat1:null, innings:1, runs:0, balls:0, history:[], inn1:0, inn1w:0, created:Date.now()});
       list();
     });
   };
@@ -187,55 +231,112 @@ async function schedule(){
 
 // ---- MATCH (live view + scoring) ----
 function openMatch(id){
-  S.view = "match"; S.ex = false; if (S.unsubM) S.unsubM();
+  S.view = "match"; S.ex = false; S.sel = {1:[], 2:[]}; S.sub = {1:"", 2:""}; if (S.unsubM) S.unsubM();
   S.unsubM = onSnapshot(ref(id), s => {
     if (!s.exists()) { $("#app").innerHTML = `<div class="msg">Match not found.</div><button class="btn s" id="bk">← Matches</button>`; $("#bk").onclick = list; return; }
     S.m = {...s.data(), id:s.id, history:s.data().history || []}; matchView();
   });
 }
-const ball = (r, b, w) => act(() => updateDoc(ref(S.m.id), {runs:S.m.runs + r, balls:S.m.balls + b, history:[...S.m.history, {r, b, w:w ? 1 : 0}]}));
+const ball = (kind, v, w) => act(() => {
+  const m = S.m, c = m.cur, legal = kind ? 0 : 1, r = kind ? v + 1 : v;
+  const e = {r, b:legal, w:w ? 1 : 0, e:kind, br:kind === "wd" ? 0 : v};
+  const u = {runs:m.runs + r, balls:m.balls + legal};
+  if (c) {
+    Object.assign(e, {s:c.s ?? null, o:c.b ?? null, p:[c.s ?? null, c.n ?? null, c.b ?? null, c.lb ?? null]});
+    let s = c.s, n = c.n, b = c.b, lb = c.lb ?? null;
+    if (v % 2) [s, n] = [n, s];
+    if (w) s = null;
+    if (legal && u.balls % 6 === 0) { [s, n] = [n, s]; lb = b; b = null; }
+    u.cur = {s:s ?? null, n:n ?? null, b:b ?? null, lb};
+  }
+  u.history = [...m.history, e];
+  return updateDoc(ref(m.id), u);
+});
 const undo = () => act(() => {
   const h = [...S.m.history], l = h.pop(); if (!l) return;
-  return updateDoc(ref(S.m.id), {runs:Math.max(0, S.m.runs - l.r), balls:Math.max(0, S.m.balls - l.b), history:h, status:"live"});
+  const u = {runs:Math.max(0, S.m.runs - l.r), balls:Math.max(0, S.m.balls - l.b), history:h, status:"live"};
+  if (l.p) u.cur = {s:l.p[0], n:l.p[1], b:l.p[2], lb:l.p[3]};
+  return updateDoc(ref(S.m.id), u);
 });
+const squadPick = (m, k) => {
+  const pl = m["pl" + k], sel = S.sel[k], need = Math.min(11, pl.length), rest = pl.filter(p => !sel.includes(p));
+  return `<div class="xm"><h3>${esc(m["n" + k])} — PLAYING XI (${sel.length}/${need})</h3>
+    <div class="chips">${pl.map(p => `<button class="chip ${sel.includes(p) ? "on" : ""}" data-k="${k}" data-p="${esc(p)}">${esc(p)}</button>`).join("")}</div>
+    <label>12th player</label><select data-sub="${k}"><option value="">— none —</option>${rest.map(p => `<option ${S.sub[k] === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></div>`;
+};
+const sel = (id, arr) => `<select id="${id}">${arr.map(p => `<option>${esc(p)}</option>`).join("")}</select>`;
 
 function matchView(){
   const m = S.m, i = info(m), A = S.admin, base = location.origin + location.pathname;
   const view = base + "?match=" + m.id, ov = base + "?mode=overlay&match=" + m.id;
+  const P = !!(m.pl1 && m.pl1.length), fi = m.bat1 === 2 ? 2 : 1, kb = i.inn === 1 ? fi : 3 - fi;
+  const xiB = m["xi" + kb] || [], xiW = m["xi" + (3 - kb)] || [], c = m.cur;
+  const outs = new Set(m.history.filter(x => x.w).map(x => x.s));
   if (A && m.status === "live" && i.done) act(() => updateDoc(ref(m.id), {status:"completed"}));
+  const stage = A && m.status === "live" && m.xi1 && !i.done && !i.i1over ? (!c ? "open" : (!c.s || !c.n) ? "bat" : !c.b ? "bowl" : "") : "";
   let h = `<div class="top"><button class="btn s sm" id="bk">← Matches</button><a class="btn s sm" target="_blank" href="https://wa.me/?text=${encodeURIComponent(view)}">📲 Share</a></div>
     <div class="mut c" style="margin-bottom:6px">${esc(tname(m.tid))} · ${m.overs} overs${m.when ? " · " + when(m.when) : ""}</div>`;
   if (m.status === "scheduled") {
     h += `<div class="card" style="cursor:default"><div class="vs c"><b>${esc(m.n1)}</b> vs <b>${esc(m.n2)}</b></div><div class="mut c">${esc(m.venue || "")}</div></div>`;
-    h += A ? `<label>Who bats first?</label><select id="bf"><option value="1">${esc(m.n1)}</option><option value="2">${esc(m.n2)}</option></select><button class="btn" id="st">Start Match</button>` : `<div class="tg">Match not started yet</div>`;
+    if (A) h += `<label>Who bats first?</label><select id="bf"><option value="1">${esc(m.n1)}</option><option value="2">${esc(m.n2)}</option></select>${P ? squadPick(m, 1) + squadPick(m, 2) : ""}<button class="btn" id="st">Start Match</button>`;
+    else h += `<div class="tg">Match not started yet</div>`;
   } else {
-    h += ticker(m);
+    h += ticker(m) + players(m);
     if (m.innings === 2 && !i.done) { const need = m.inn1 - m.runs + 1; h += `<div class="tg">${need > 0 ? `🎯 Need ${need} runs in ${ovs(i.maxb - m.balls)} overs` : "✅ Target achieved!"}</div>`; }
     if (i.i1over) {
       h += `<div class="card" style="cursor:default;text-align:center"><div class="os gold" style="font-size:24px">Innings Over</div><div class="os" style="font-size:44px">${m.runs}/${i.w}</div><div class="mut">${esc(i.bat)} — 1st innings</div><div>${esc(i.bowl)} to chase</div></div>`;
       if (A) h += `<button class="btn" id="s2">Start 2nd Innings</button><button class="btn s" id="un">↩ Undo last ball</button>`;
+    } else if (stage === "open") {
+      h += `<div class="xm"><h3>OPENING PLAYERS</h3><label>Striker</label>${sel("ps", xiB)}<label>Non-striker</label>${sel("pn", xiB)}<label>Opening bowler</label>${sel("pb", xiW)}<button class="btn" id="cf">Confirm</button></div>`;
+    } else if (stage === "bat") {
+      const av = xiB.filter(p => !outs.has(p) && p !== c.s && p !== c.n);
+      h += `<div class="xm"><h3>NEW BATTER</h3>${sel("pa", av)}<button class="btn" id="cf">Confirm</button></div><button class="btn s" id="un">↩ Undo last ball</button>`;
+    } else if (stage === "bowl") {
+      h += `<div class="xm"><h3>BOWLER FOR OVER ${Math.floor(m.balls / 6) + 1}</h3>${sel("pb2", xiW.filter(p => p !== c.lb))}<button class="btn" id="cf">Confirm</button></div><button class="btn s" id="un">↩ Undo last ball</button>`;
     } else if (A && !i.done) {
       h += S.ex
-        ? `<div class="xm"><h3>WIDE BALLS</h3><div class="xg" style="grid-template-columns:repeat(5,1fr)">${[0,1,2,3,4].map(v => `<button class="sb" data-x="${v}">W+${v}</button>`).join("")}</div>
-           <h3>NO BALLS</h3><div class="xg" style="grid-template-columns:repeat(6,1fr)">${[0,1,2,3,4,6].map(v => `<button class="sb" data-x="${v}">N+${v}</button>`).join("")}</div><button class="btn s" id="xc">Cancel</button></div>`
+        ? `<div class="xm"><h3>WIDE BALLS</h3><div class="xg" style="grid-template-columns:repeat(5,1fr)">${[0,1,2,3,4].map(v => `<button class="sb" data-xk="wd" data-xv="${v}">W+${v}</button>`).join("")}</div>
+           <h3>NO BALLS</h3><div class="xg" style="grid-template-columns:repeat(6,1fr)">${[0,1,2,3,4,6].map(v => `<button class="sb" data-xk="nb" data-xv="${v}">N+${v}</button>`).join("")}</div><button class="btn s" id="xc">Cancel</button></div>`
         : `<div class="g4">${[0,1,2,3].map(v => `<button class="sb" data-r="${v}">${v}</button>`).join("")}</div>
            <div class="g4"><button class="sb f" data-r="4">4</button><button class="sb s6" data-r="6">6</button><button class="sb o" id="out">OUT</button><button class="sb u" id="un">UNDO</button></div>
            <button class="btn" id="ex">ADD EXTRAS</button>`;
     } else if (A && i.done) h += `<button class="btn s" id="un">↩ Undo last ball</button>`;
     if (!i.done) h += `<div class="mut c">Live — updates automatically</div>`;
+    if (m.xi1) h += `<details class="mut" style="margin-top:10px"><summary>Playing XIs &amp; 12th players</summary>${[1,2].map(k => `<div style="margin-top:6px"><b>${esc(m["n" + k])}</b>: ${esc((m["xi" + k] || []).join(", "))}<br>12th: ${esc(m["s" + k] || "–")}</div>`).join("")}</details>`;
   }
   if (A) h += `<button class="btn s" id="cp" style="margin-top:14px">📋 Copy Overlay Link</button><div class="mut c" style="word-break:break-all;font-size:11px">${esc(ov)}</div>`;
+  const y = scrollY;
   $("#app").innerHTML = h + `<div id="msg" class="msg"></div>`;
+  scrollTo(0, y);
   if (A && m.status === "live") lock();
+  if ($("#pn")) $("#pn").selectedIndex = Math.min(1, $("#pn").options.length - 1);
   $("#bk").onclick = list;
-  const on = (sel, fn) => { const e = $(sel); if (e) e.onclick = fn; };
-  on("#st", () => act(() => updateDoc(ref(m.id), {status:"live", bat1:+$("#bf").value, innings:1, runs:0, balls:0, history:[]})));
-  on("#s2", () => act(() => updateDoc(ref(m.id), {innings:2, inn1:m.runs, inn1w:i.w, runs:0, balls:0, history:[]})));
-  on("#out", () => ball(0, 1, 1)); on("#un", undo);
+  const on = (s, fn) => { const e = $(s); if (e) e.onclick = fn; };
+  on("#st", () => {
+    const u = {status:"live", bat1:+$("#bf").value, innings:1, runs:0, balls:0, history:[], cur:null};
+    if (P) {
+      for (const k of [1, 2]) { if (S.sel[k].length !== Math.min(11, m["pl" + k].length)) return flash("Select the playing XI for both teams."); u["xi" + k] = S.sel[k]; u["s" + k] = S.sub[k] || ""; }
+    }
+    act(() => updateDoc(ref(m.id), u));
+  });
+  on("#s2", () => act(() => updateDoc(ref(m.id), {innings:2, inn1:m.runs, inn1w:i.w, inn1b:m.balls, hist1:m.history, runs:0, balls:0, history:[], cur:null})));
+  on("#cf", () => {
+    if (stage === "open") { const s = $("#ps").value, n = $("#pn").value; if (s === n) return flash("Striker and non-striker must be different."); act(() => updateDoc(ref(m.id), {cur:{s, n, b:$("#pb").value, lb:null}})); }
+    else if (stage === "bat") { const p = $("#pa").value; if (p) act(() => updateDoc(ref(m.id), {cur:{...c, [c.s ? "n" : "s"]:p}})); }
+    else act(() => updateDoc(ref(m.id), {cur:{...c, b:$("#pb2").value}}));
+  });
+  on("#out", () => ball("", 0, 1)); on("#un", undo);
   on("#ex", () => { S.ex = true; matchView(); }); on("#xc", () => { S.ex = false; matchView(); });
   on("#cp", e => navigator.clipboard.writeText(ov).then(() => { e.target.textContent = "✅ Copied!"; setTimeout(() => e.target.textContent = "📋 Copy Overlay Link", 2000); }));
-  document.querySelectorAll("[data-r]").forEach(b => b.onclick = () => ball(+b.dataset.r, 1, 0));
-  document.querySelectorAll("[data-x]").forEach(b => b.onclick = () => { S.ex = false; ball(+b.dataset.x + 1, 0, 0); });
+  document.querySelectorAll("[data-r]").forEach(b => b.onclick = () => ball("", +b.dataset.r, 0));
+  document.querySelectorAll("[data-xk]").forEach(b => b.onclick = () => { S.ex = false; ball(b.dataset.xk, +b.dataset.xv, 0); });
+  document.querySelectorAll("[data-k]").forEach(b => b.onclick = () => {
+    const k = b.dataset.k, p = b.dataset.p, a = S.sel[k], need = Math.min(11, m["pl" + k].length);
+    if (a.includes(p)) S.sel[k] = a.filter(x => x !== p);
+    else if (a.length < need) { a.push(p); if (S.sub[k] === p) S.sub[k] = ""; }
+    matchView();
+  });
+  document.querySelectorAll("[data-sub]").forEach(s => s.onchange = () => { S.sub[s.dataset.sub] = s.value; });
 }
 
 // ---- OVERLAY (OBS / streaming) ----
@@ -244,9 +345,9 @@ function overlay(id){
   onSnapshot(ref(id), s => {
     if (!s.exists()) { $("#app").innerHTML = ""; return; }
     const m = {...s.data(), history:s.data().history || []};
-    $("#app").innerHTML = m.status === "scheduled"
+    $("#app").innerHTML = `<div class="ovw">${m.status === "scheduled"
       ? `<div class="tk ov" style="justify-content:center"><i class="gb"></i><div class="res">${esc(m.n1)} vs ${esc(m.n2)}</div></div>`
-      : ticker(m, true);
+      : players(m) + ticker(m, true)}</div>`;
   });
 }
 
