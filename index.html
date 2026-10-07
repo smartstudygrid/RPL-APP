@@ -109,7 +109,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sha = async t => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2,"0")).join("");
 
-const S = {page:"home", team:null, viewOnly:false, edit:false, d:null, msg:"",teams:[],adminHash:null,seeded:false,err:""};
+const S = {page:"home", team:null, viewOnly:false, edit:false, d:null, msg:"",teams:[],tours:[{id:"default",name:"Challenger's Cup"}],tname:"",tour:"",adminHash:null,seeded:false,err:""};
 
 // ===== PHOTO CROPPER (drag + zoom) =====
 function crop(file, ratio, circle){
@@ -153,16 +153,17 @@ function crop(file, ratio, circle){
 }
 
 // ===== TEAMS / LOGIN =====
-const fallback = () => DEFAULT_TEAMS.map(id => ({id, locked:false, pw:TEAM_HASH}));
+const fallback = () => DEFAULT_TEAMS.map(id => ({id, name:id, tid:"default", locked:false, pw:TEAM_HASH}));
 async function loadTeams(){
   try {
-    const [snap, cfg] = await Promise.all([getDocs(collection(db, COL)), getDoc(doc(db, "config", "admin"))]);
-    S.teams = snap.docs.map(d => ({id:d.id, locked:!!d.data().is_locked, pw:d.data().pw_hash || TEAM_HASH})).sort((a, b) => a.id.localeCompare(b.id));
+    const [snap, cfg, ts] = await Promise.all([getDocs(collection(db, COL)), getDoc(doc(db, "config", "admin")), getDocs(collection(db, "tournaments"))]);
+    S.tours = [{id:"default", name:"Challenger's Cup"}, ...ts.docs.map(d => ({id:d.id, name:d.data().name || d.id, at:d.data().created || 0})).sort((a, b) => a.at - b.at)];
+    S.teams = snap.docs.map(d => ({id:d.id, name:d.data().team_name || d.id, tid:d.data().tournament || "default", locked:!!d.data().is_locked, pw:d.data().pw_hash || TEAM_HASH})).sort((a, b) => a.name.localeCompare(b.name));
     S.adminHash = cfg.exists() ? cfg.data().hash : ADMIN_HASH;
     S.seeded = S.teams.length > 0;
     if (!S.seeded) S.teams = fallback();
     S.err = "";
-  } catch (e) { S.teams = fallback(); S.adminHash = ADMIN_HASH; S.err = e.message; }
+  } catch (e) { S.tours = [{id:"default", name:"Challenger's Cup"}]; S.teams = fallback(); S.adminHash = ADMIN_HASH; S.err = e.message; }
 }
 const goHome = async () => { S.page = "home"; S.msg = ""; await loadTeams(); home(); };
 
@@ -170,8 +171,10 @@ function home(){
   $("#app").innerHTML = `
   <div class="login">
     <div class="lt">⚡ Enter Your Squad</div>
+    <label class="l">Select Tournament</label>
+    <select id="tour">${S.tours.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select>
     <label class="l">Select Your Team</label>
-    <select id="team">${S.teams.map(t => `<option>${esc(t.id)}</option>`).join("")}</select>
+    <select id="team"></select>
     <label class="l">Password</label>
     <input type="password" id="pw" placeholder="Enter team password…">
     <button class="btn" id="enter">Enter Dashboard</button>
@@ -182,11 +185,13 @@ function home(){
     <div class="msg err" id="m">${esc(S.err)}</div>
   </div>`;
   const m = t => { $("#m").textContent = t; };
+  const fill = () => { $("#team").innerHTML = S.teams.filter(t => t.tid === $("#tour").value).map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("") || `<option value="">No teams yet</option>`; };
+  $("#tour").onchange = fill; fill();
   $("#enter").onclick = async () => {
     const t = S.teams.find(x => x.id === $("#team").value);
     if (t && await sha($("#pw").value) === t.pw) openSquad(t.id, false); else m("Incorrect password.");
   };
-  $("#view").onclick = () => openSquad($("#team").value, true);
+  $("#view").onclick = () => { if ($("#team").value) openSquad($("#team").value, true); };
   $("#ap").oninput = async () => {
     const ok = await sha($("#ap").value) === S.adminHash;
     $("#adm").innerHTML = ok ? `<button class="btn" id="oa">⚙️ Open Admin Panel</button>` : "";
@@ -209,10 +214,12 @@ async function openAdmin(){
 function admin(msg = "", cls = "ok"){
   $("#app").innerHTML = `
   <div class="th"><div><div class="tn gold">Admin Panel</div><div class="ts">Teams · Passwords · Locks</div></div></div>
+  <div class="panel"><div class="ph">🏆 Create Tournament</div>
+    <div class="row" style="border:none"><input type="text" id="tn" placeholder="Tournament name"><button class="btn sm auto" id="ct">Create</button></div></div>
   <div class="panel"><div class="ph">➕ Add Team / Login</div>
-    <div class="row"><input type="text" id="nt" placeholder="Team name"><input type="password" id="np" placeholder="Team password"><button class="btn sm auto" id="add">Add Team</button></div></div>
+    <div class="row"><select id="nto" style="width:200px">${S.tours.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select><input type="text" id="nt" placeholder="Team name"><input type="password" id="np" placeholder="Team password"><button class="btn sm auto" id="add">Add Team</button></div></div>
   <div class="panel"><div class="ph">Teams (${S.teams.length})</div>
-    ${S.teams.map((t, i) => `<div class="row"><b>${t.locked ? "🔒" : "🔓"} ${esc(t.id)}</b>
+    ${S.teams.map((t, i) => `<div class="row"><b>${t.locked ? "🔒" : "🔓"} ${esc(t.name)} <small style="opacity:.6">· ${esc((S.tours.find(x => x.id === t.tid) || {}).name || t.tid)}</small></b>
       <input type="password" data-pw="${i}" placeholder="New password">
       <button class="btn sm auto" data-act="pw" data-i="${i}">Set Password</button>
       <button class="btn sm sec auto" data-act="lock" data-i="${i}">${t.locked ? "Unlock" : "Lock"}</button>
@@ -226,14 +233,21 @@ function admin(msg = "", cls = "ok"){
   const run = async (fn, ok) => { try { await fn(); await loadTeams(); admin(ok, "ok"); } catch (e) { flash(e.message || "Error", "err"); } };
   const setAll = v => run(async () => { const b = writeBatch(db); S.teams.forEach(t => b.set(doc(db, COL, t.id), {is_locked:v}, {merge:true})); await b.commit(); }, v ? "All squads LOCKED." : "All squads UNLOCKED.");
   $("#hm").onclick = goHome;
+  $("#ct").onclick = () => {
+    const n = $("#tn").value.trim(), id = n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "t" + Date.now();
+    if (!n || id === "default") return flash("Enter a valid tournament name.", "err");
+    if (S.tours.some(t => t.id === id)) return flash("That tournament already exists.", "err");
+    run(() => setDoc(doc(db, "tournaments", id), {name:n, created:Date.now()}), `Tournament "${n}" created.`);
+  };
   $("#lall").onclick = () => setAll(true);
   $("#uall").onclick = () => setAll(false);
   $("#add").onclick = () => {
     const n = $("#nt").value.trim(), p = $("#np").value;
     if (!n || n.includes("/") || n === "." || n === "..") return flash("Enter a valid team name (no slashes).", "err");
     if (p.length < 4) return flash("Password must be at least 4 characters.", "err");
-    if (S.teams.some(t => t.id.toLowerCase() === n.toLowerCase())) return flash("That team already exists.", "err");
-    run(async () => setDoc(doc(db, COL, n), {team_name:n, pw_hash:await sha(p), is_locked:false, player_list:Array(17).fill(""), squad_pics:{}, captain_name:"", cap_pic:null, team_logo:null}), `Team "${n}" added.`);
+    const tid = $("#nto").value, did = tid === "default" ? n : tid + "__" + n;
+    if (S.teams.some(t => t.id.toLowerCase() === did.toLowerCase())) return flash("That team already exists in this tournament.", "err");
+    run(async () => setDoc(doc(db, COL, did), {team_name:n, tournament:tid, pw_hash:await sha(p), is_locked:false, player_list:Array(17).fill(""), squad_pics:{}, captain_name:"", cap_pic:null, team_logo:null}), `Team "${n}" added.`);
   };
   $("#cap").onclick = () => {
     const p = $("#nap").value;
@@ -245,10 +259,10 @@ function admin(msg = "", cls = "ok"){
     if (a === "pw") {
       const p = document.querySelector(`[data-pw="${b.dataset.i}"]`).value;
       if (p.length < 4) return flash("Password must be at least 4 characters.", "err");
-      run(async () => setDoc(doc(db, COL, t.id), {pw_hash:await sha(p)}, {merge:true}), `Password updated for ${t.id}.`);
-    } else if (a === "lock") run(() => setDoc(doc(db, COL, t.id), {is_locked:!t.locked}, {merge:true}), `${t.id} ${t.locked ? "unlocked" : "locked"}.`);
+      run(async () => setDoc(doc(db, COL, t.id), {pw_hash:await sha(p)}, {merge:true}), `Password updated for ${t.name}.`);
+    } else if (a === "lock") run(() => setDoc(doc(db, COL, t.id), {is_locked:!t.locked}, {merge:true}), `${t.name} ${t.locked ? "unlocked" : "locked"}.`);
     else if (a === "view") openSquad(t.id, true);
-    else if (confirm(`Delete "${t.id}" and its whole squad?`)) run(() => deleteDoc(doc(db, COL, t.id)), `${t.id} deleted.`);
+    else if (confirm(`Delete "${t.name}" and its whole squad?`)) run(() => deleteDoc(doc(db, COL, t.id)), `${t.name} deleted.`);
   });
 }
 
@@ -269,7 +283,8 @@ async function openSquad(team, viewOnly){
     $("#app").innerHTML = `<div class="login"><div class="msg err">Connection error: ${esc(e.message)}</div><button class="btn sec" id="b">Back</button></div>`;
     $("#b").onclick = home; return;
   }
-  Object.assign(S, {page:"squad", team, viewOnly, edit:false, msg:""});
+  const tm = S.teams.find(x => x.id === team);
+  Object.assign(S, {page:"squad", team, tname:tm ? tm.name : team, tour:(S.tours.find(x => tm && x.id === tm.tid) || S.tours[0]).name, viewOnly, edit:false, msg:""});
   squad();
 }
 
@@ -290,7 +305,7 @@ function squad(){
   $("#app").innerHTML = `
   <div class="th">
     <div class="logo ${d.logo ? "has" : ""}">${d.logo ? `<img src="data:image/jpeg;base64,${d.logo}">` : ""}</div>
-    <div><div class="tn gold">${esc(S.team)}</div><div class="ts">Challenger's Cup · Season 18 2026</div></div>
+    <div><div class="tn gold">${esc(S.tname)}</div><div class="ts">${esc(S.tour)} · Season 18 2026</div></div>
   </div>
   ${d.is_locked && !S.viewOnly ? `<div class="lock">🔒 Squad is Locked</div>` : ""}
   ${edit ? `<div style="margin-bottom:14px"><label class="l">Team Logo</label><label class="up" style="display:inline-block;padding:4px 14px">⬆ Upload logo<input type="file" accept="image/*" data-up="logo"></label></div>` : ""}
@@ -330,7 +345,7 @@ function squad(){
     $("#save").disabled = true; $("#save").textContent = "Saving…";
     try {
       await setDoc(doc(db, COL, S.team), {
-        team_name: S.team, captain_name: d.cap_name, player_list: d.names,
+        team_name: S.tname, captain_name: d.cap_name, player_list: d.names,
         squad_pics: d.pics, cap_pic: d.cap_pic, team_logo: d.logo
       }, {merge: true});
       S.msg = "✅ Squad saved successfully!";
