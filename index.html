@@ -105,6 +105,7 @@ body.sq .wrap{max-width:none}
 
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,signInWithEmailAndPassword,signOut,reauthenticateWithCredential,EmailAuthProvider,updatePassword,setPersistence,browserSessionPersistence} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {getFirestore,doc,getDoc,getDocs,setDoc,deleteDoc,collection,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ===== 1. PASTE YOUR FIREBASE CONFIG HERE =====
@@ -118,11 +119,13 @@ const firebaseConfig = {
 };
 // SHA-256 hashes of the team / admin passwords (not plaintext)
 const TEAM_HASH  = "0086b0a2fd7337577f13ee53f8ea532160e1a682d2a874c3bb03ab568b3d4385";
-const ADMIN_HASH = "b480e8847b73883823645bae4a47fc58796b34a3276a7c2e369c8805b79536b6";
 const DEFAULT_TEAMS = ["Gladiators YB","KHAN JEE","KAPTAN 11","Pak EAGLES","RCC","SWAT XI","Riyadh Stallions","Riyadh Strikers","Saudi German","Punjab XI","Riyadh Kings","Team Avengers"];
 const COL = "squads";
 
-const db = getFirestore(initializeApp(firebaseConfig));
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+setPersistence(auth, browserSessionPersistence).catch(() => {});
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const sha = async t => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)))].map(b => b.toString(16).padStart(2,"0")).join("");
@@ -174,14 +177,13 @@ function crop(file, ratio, circle){
 const fallback = () => DEFAULT_TEAMS.map(id => ({id, name:id, tid:"default", locked:false, pw:TEAM_HASH}));
 async function loadTeams(){
   try {
-    const [snap, cfg, ts] = await Promise.all([getDocs(collection(db, COL)), getDoc(doc(db, "config", "admin")), getDocs(collection(db, "tournaments"))]);
+    const [snap, ts] = await Promise.all([getDocs(collection(db, COL)), getDocs(collection(db, "tournaments"))]);
     S.tours = [{id:"default", name:"Challenger's Cup"}, ...ts.docs.map(d => ({id:d.id, name:d.data().name || d.id, at:d.data().created || 0})).sort((a, b) => a.at - b.at)];
     S.teams = snap.docs.map(d => ({id:d.id, name:d.data().team_name || d.id, tid:d.data().tournament || "default", locked:!!d.data().is_locked, pw:d.data().pw_hash || TEAM_HASH})).sort((a, b) => a.name.localeCompare(b.name));
-    S.adminHash = cfg.exists() ? cfg.data().hash : ADMIN_HASH;
     S.seeded = S.teams.length > 0;
     if (!S.seeded) S.teams = fallback();
     S.err = "";
-  } catch (e) { S.tours = [{id:"default", name:"Challenger's Cup"}]; S.teams = fallback(); S.adminHash = ADMIN_HASH; S.err = e.message; }
+  } catch (e) { S.tours = [{id:"default", name:"Challenger's Cup"}]; S.teams = fallback(); S.err = e.message; }
 }
 const goHome = async () => { S.page = "home"; S.msg = ""; await loadTeams(); home(); };
 
@@ -215,26 +217,26 @@ function home(){
 // ===== ADMIN SIGN-IN (separate screen, lockout after failures, 30-min session) =====
 const AD_KEY = "ad_ok", FAIL_KEY = "ad_fail", TTL = 30 * 60 * 1000;
 const ss = (k, v) => { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch {} };
-const adminOk = () => Date.now() - (+ss(AD_KEY) || 0) < TTL;
+const adminOk = () => !!auth.currentUser && Date.now() - (+ss(AD_KEY) || 0) < TTL;
 function adminLogin(){
   document.body.classList.remove("sq");
   $("#app").innerHTML = `<div class="login"><div class="lt">🔒 League Admin</div>
-    <label class="l">Admin Password</label>
-    <input type="password" id="ap" placeholder="Enter admin password…">
+    <label class="l">Admin Email</label>
+    <input type="text" id="ae" placeholder="Admin email" autocomplete="username">
+    <label class="l">Password</label>
+    <input type="password" id="ap" placeholder="Enter admin password…" autocomplete="current-password">
     <button class="btn" id="si">Sign In</button>
     <button class="btn sec" id="bk">← Back</button>
     <div class="msg err" id="m"></div></div>`;
   const m = t => { $("#m").textContent = t; };
   const go = async () => {
-    const f = JSON.parse(ss(FAIL_KEY) || '{"n":0,"until":0}'), wait = Math.ceil((f.until - Date.now()) / 1000);
-    if (wait > 0) return m(`Too many attempts. Try again in ${wait}s.`);
-    if (await sha($("#ap").value) === S.adminHash) { ss(FAIL_KEY, null); ss(AD_KEY, String(Date.now())); return openAdmin(); }
-    f.n++; if (f.n >= 3) f.until = Date.now() + Math.min(300, 15 * 2 ** (f.n - 3)) * 1000;
-    ss(FAIL_KEY, JSON.stringify(f)); $("#ap").value = ""; m("Incorrect password.");
+    $("#si").disabled = true;
+    try { await signInWithEmailAndPassword(auth, $("#ae").value.trim(), $("#ap").value); ss(AD_KEY, String(Date.now())); openAdmin(); }
+    catch (e) { $("#si").disabled = false; $("#ap").value = ""; m(e.code === "auth/too-many-requests" ? "Too many attempts. Try again later." : "Incorrect email or password."); }
   };
   $("#bk").onclick = goHome; $("#si").onclick = go;
   $("#ap").onkeydown = e => { if (e.key === "Enter") go(); };
-  $("#ap").focus();
+  $("#ae").focus();
 }
 
 // ===== ADMIN PANEL =====
@@ -251,7 +253,7 @@ async function openAdmin(){
 }
 function admin(msg = "", cls = "ok"){
   document.body.classList.remove("sq");
-  if (!adminOk()) return adminLogin();
+  if (!adminOk()) { signOut(auth); return adminLogin(); }
   ss(AD_KEY, String(Date.now()));
   $("#app").innerHTML = `
   <div class="th"><div><div class="tn gold">Admin Panel</div><div class="ts">Teams · Passwords · Locks</div></div></div>
@@ -274,7 +276,7 @@ function admin(msg = "", cls = "ok"){
   const run = async (fn, ok) => { try { await fn(); await loadTeams(); admin(ok, "ok"); } catch (e) { flash(e.message || "Error", "err"); } };
   const setAll = v => run(async () => { const b = writeBatch(db); S.teams.forEach(t => b.set(doc(db, COL, t.id), {is_locked:v}, {merge:true})); await b.commit(); }, v ? "All squads LOCKED." : "All squads UNLOCKED.");
   $("#hm").onclick = goHome;
-  $("#so").onclick = () => { ss(AD_KEY, null); goHome(); };
+  $("#so").onclick = async () => { ss(AD_KEY, null); await signOut(auth); goHome(); };
   $("#ct").onclick = () => {
     const n = $("#tn").value.trim(), id = n.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "t" + Date.now();
     if (!n || id === "default") return flash("Enter a valid tournament name.", "err");
@@ -292,10 +294,10 @@ function admin(msg = "", cls = "ok"){
     run(async () => setDoc(doc(db, COL, did), {team_name:n, tournament:tid, pw_hash:await sha(p), is_locked:false, player_list:Array(17).fill(""), squad_pics:{}, captain_name:"", cap_pic:null, team_logo:null}), `Team "${n}" added.`);
   };
   $("#cap").onclick = async () => {
-    const p = $("#nap").value;
-    if (await sha($("#oap").value) !== S.adminHash) return flash("Current admin password is incorrect.", "err");
-    if (p.length < 6) return flash("Admin password must be at least 6 characters.", "err");
-    run(async () => setDoc(doc(db, "config", "admin"), {hash:await sha(p)}), "Admin password changed.");
+    const p = $("#nap").value, u = auth.currentUser;
+    if (p.length < 8) return flash("New password must be at least 8 characters.", "err");
+    try { await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, $("#oap").value)); await updatePassword(u, p); flash("Admin password changed.", "ok"); }
+    catch { flash("Current password is incorrect.", "err"); }
   };
   document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
     const t = S.teams[+b.dataset.i], a = b.dataset.act;
@@ -452,6 +454,7 @@ function squad(){
   };
 }
 
+await auth.authStateReady?.();
 await loadTeams();
 home();
 </script>
