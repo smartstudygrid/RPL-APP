@@ -186,7 +186,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 // ---- LIST ----
 function list(){
   S.view = "list"; S.ex = false; if (S.unsubM) S.unsubM();
-  $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Cricket Scorer</h1>${auth.currentUser ? `<button class="btn s sm" id="so">Sign Out</button>` : `<button class="btn s sm" id="ad">Sign In</button>`}</div>
+  $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Cricket Scorer</h1>${auth.currentUser ? `<button class="btn s sm" id="so">Sign Out</button>`:`<button class="btn s sm" id="ad">Sign In</button>`}</div>
     <select id="ft"><option value="">All tournaments</option>${S.tours.map(t => `<option value="${esc(t.id)}" ${t.id === S.tour ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
     <div class="tabs"><button class="btn s sm ${S.tab === "m" ? "on" : ""}" id="tm">Matches</button><button class="btn s sm ${S.tab === "p" ? "on" : ""}" id="tp">Points Table</button></div>
     ${S.admin ? `<button class="btn" id="sch">＋ Schedule Match</button><button class="btn s" id="scr">👥 Manage Scorers</button>` : ""}<div id="ml"></div><div id="msg" class="msg"></div>`;
@@ -399,7 +399,7 @@ function matchView(){
   const KINDS = [["b","Bowled"],["c","Caught"],["lbw","LBW"],["ro","Run Out"],["st","Stumped"],["hw","Hit Wicket"],["rtd","Retired Out"],["rth","Retired Hurt"]];
   const outUI = () => S.out === "menu"
     ? `<div class="xm"><h3>HOW OUT?</h3><div class="xg" style="grid-template-columns:repeat(2,1fr)">${KINDS.map(([k, t]) => `<button class="sb" style="font-size:17px" data-ok="${k}">${t}</button>`).join("")}</div><button class="btn s" id="oc">Cancel</button></div>`
-    : `<div class="xm"><h3>${KINDS.find(x => x[0] === S.out)[1].toUpperCase()}</h3>${["ro","rtd","rth"].includes(S.out) ? `<label>${S.out === "ro" ? "Batter out" : "Batter"}</label>${sel("od", cb2)}` : ""}${S.out === "ro" ? `<label>Runs completed</label><select id="orr">${[0,1,2,3].map(v => `<option>${v}</option>`).join("")}</select>` : ""}${["c","st","ro"].includes(S.out) ? fsel : ""}<button class="btn" id="ocf">Confirm</button><button class="btn s" id="oc">Cancel</button></div>`;
+    : `<div class="xm"><h3>${KINDS.find(x => x[0] === S.out)[1].toUpperCase()}</h3>${["ro","rtd","rth"].includes(S.out) ? `<label>${S.out === "ro" ? "Batter out" : "Batter"}</label>${sel("od", cb2)}`: ""}${S.out === "ro" ?`<label>Runs completed</label><select id="orr">${[0,1,2,3].map(v => `<option>${v}</option>`).join("")}</select>` : ""}${["c","st","ro"].includes(S.out) ? fsel : ""}<button class="btn" id="ocf">Confirm</button><button class="btn s" id="oc">Cancel</button></div>`;
   const cbUI = () => `<div class="xm"><h3>CHANGE BATTER</h3><label>Replace</label>${sel("cr", cb2)}<label>With</label>${sel("cw", xiB.filter(p => !outs.has(p) && p !== c.s && p !== c.n))}<button class="btn" id="cbc">Confirm</button><button class="btn s" id="cbx">Cancel</button></div>`;
   let h = `<div class="top"><button class="btn s sm" id="bk">← Matches</button><a class="btn s sm" target="_blank" href="https://wa.me/?text=${encodeURIComponent(view)}">📲 Share</a></div>
     <div class="mut c" style="margin-bottom:6px">${esc(tname(m.tid))} · ${m.overs} overs${m.when ? " · " + when(m.when) : ""}</div>`;
@@ -488,7 +488,6 @@ function bar(m){
     return `<div class="ob" style="height:5rem"><div class="ob1"><div class="lp"><div class="lg">${logo(m.t1, m.n1)}</div><div class="tm"><b>${i.done ? "RESULT" : "UPCOMING"}</b></div></div><div class="bn"><b>${txt}</b><span>${sub}</span></div><div class="rp"><div class="lg">${logo(m.t2, m.n2)}</div></div></div></div>`;
   }
   const fig = n => { let r = 0, b = 0, w = 0; h.forEach(x => { if (x.o === n) { r += x.r; b += x.b; if (x.w && x.k !== "ro") w++; } }); return `${w}-${r}<small>(${Math.floor(b / 6)}.${b % 6})</small>`; };
-  let pr = 0, pb = 0; for (let k = h.length - 1; k >= 0; k--) { if (h[k].w || h[k].k) break; pr += h[k].r; pb += h[k].b; }
   // this over: keep a finished over on screen until the next ball is bowled
   let ov = [], lc = 0, full = false;
   h.forEach(x => { if (x.e === "ret") return; if (full) { ov = []; full = false; } ov.push(x); if (x.b && ++lc % 6 === 0) full = true; });
@@ -498,7 +497,18 @@ function bar(m){
   const idx = n => first.includes(n) ? first.indexOf(n) : 99;
   const bs = [c.s, c.n].filter(Boolean).sort((a, b) => idx(a) - idx(b));
   const bt = n => { const [r, b] = bStat(h, n); return `<div class="bt"><span class="nm"><u class="${n === c.s ? "on" : ""}"></u>${esc(n)}</span><span class="rn">${r}<small>(${b})</small></span></div>`; };
-  const mid = bs.map(n => { const [r, b] = bStat(h, n); return `${esc(n.trim().split(/\s+/)[0])} ${r} (${b})`; }).concat(`P'SHIP ${pr} (${pb})`).join(" / ");
+  const crr = m.balls ? (m.runs / (m.balls / 6)).toFixed(2) : "0.00";
+  const left = i.maxb - m.balls;
+  let mid = "";
+  if (i.inn === 1) {
+    const proj = crr > 0 ? Math.round((crr * m.overs)).toFixed(0) : m.runs;
+    mid = `CRR ${crr} · PROJ ${proj}`;
+  } else {
+    const need = m.inn1 - m.runs + 1;
+    const rrr = left > 0 && need > 0 ? (need / (left / 6)).toFixed(2) : "0.00";
+    const needTxt = need > 0 ? `NEED ${need} OFF ${left}` : "TARGET ACHIEVED";
+    mid = `CRR ${crr} · RRR ${rrr} · TGT ${m.inn1 + 1} · ${needTxt}`;
+  }
   return `<div class="ob"><div class="ob1">
     <div class="lp"><div class="lg">${bl}</div><div class="tm"><b>${esc(abbr(i.bat))}</b><span>V ${esc(abbr(i.bowl))}</span></div></div>
     <div class="sc">${m.runs}-${i.w}</div>
