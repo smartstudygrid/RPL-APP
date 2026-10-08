@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Smart Cricket Scorer</title>
+<title>Smart Scorer</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700;800&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
@@ -72,7 +72,7 @@ table.pt{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
 .gb{position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#ffb700,#c38400)}
 .tk u{width:3px;height:36px;background:linear-gradient(180deg,#7f8285,#3a3c3e,#7f8285);margin:0 4px;opacity:.8}
 .tc{display:flex;flex-direction:column;align-items:center;text-align:center;flex:1}
-.tm b{font:800 16px Oswald;text-transform:uppercase}.tm span{font:700 14px Oswald;color:var(--g);text-transform:uppercase}
+.tm b{font:800 16px Oswald;text-transform:uppercase}.tk .tm b{color:#fff}.tm span{font:700 14px Oswald;color:var(--g);text-transform:uppercase}
 .tc small{font-size:10px;letter-spacing:1px}
 .sc{font:700 38px Oswald;line-height:1}
 .ov2{font:700 24px Oswald;color:#ffd700;text-shadow:0 0 8px rgba(255,215,0,.5)}
@@ -129,6 +129,9 @@ const db = getFirestore(app), auth = getAuth(app);
 const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:"", tab:"m", mt:"", pics:{1:{},2:{}}, picsFor:"", sel:{1:[],2:[]}, sub:{1:"",2:""}};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+S.guest = false;
+const scoped = () => !!auth.currentUser && !S.admin;
+const visTours = () => scoped() ? S.tours.filter(t => (S.tids || []).includes(t.id)) : S.tours;
 const wk = m => (m.history || []).filter(x => x.w).length;
 const when = t => t ? new Date(t).toLocaleString([], {weekday:"short", day:"numeric", month:"short", hour:"2-digit", minute:"2-digit"}) : "";
 const tname = id => (S.tours.find(t => t.id === id) || {}).name || "";
@@ -200,24 +203,36 @@ let wl; const lock = async () => { try { wl = await navigator.wakeLock.request("
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.view === "match" && S.admin) lock(); });
 
 // ---- LIST ----
+function start(){
+  S.view = "start"; S.ex = false; if (S.unsubM) S.unsubM();
+  $("#app").innerHTML = `<div class="c" style="margin:80px 0 36px"><div style="font-size:64px">🏏</div><h1 class="gold" style="font-size:36px;margin-top:8px">Smart Scorer</h1><div class="mut" style="margin-top:6px">Live cricket scoring</div></div>
+    <button class="btn" id="sgn">Sign In</button><button class="btn s" id="gst">Continue as Guest</button>`;
+  $("#sgn").onclick = login;
+  $("#gst").onclick = () => { S.guest = true; list(); };
+}
 function list(){
+  if (!auth.currentUser && !S.guest) return start();
   S.view = "list"; S.ex = false; if (S.unsubM) S.unsubM();
-  $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Cricket Scorer</h1>${auth.currentUser ? `<button class="btn s sm" id="so">Sign Out</button>`:`<button class="btn s sm" id="ad">Sign In</button>`}</div>
-    <select id="ft"><option value="">All tournaments</option>${S.tours.map(t => `<option value="${esc(t.id)}" ${t.id === S.tour ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+  const vt = visTours();
+  if (S.tour && !vt.some(t => t.id === S.tour)) S.tour = "";
+  if (scoped() && !S.tour && vt.length === 1) S.tour = vt[0].id;
+  $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Smart Scorer</h1>${auth.currentUser ? `<button class="btn s sm" id="so">Sign Out</button>`:`<button class="btn s sm" id="ad">Sign In</button>`}</div>
+    <select id="ft">${!scoped() ? `<option value="">All tournaments</option>` : vt.length > 1 ? `<option value="">All my tournaments</option>` : ""}${vt.map(t => `<option value="${esc(t.id)}" ${t.id === S.tour ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
     <div class="tabs"><button class="btn s sm ${S.tab === "m" ? "on" : ""}" id="tm">Matches</button><button class="btn s sm ${S.tab === "p" ? "on" : ""}" id="tp">Points Table</button></div>
     ${S.admin ? `<button class="btn" id="sch">＋ Schedule Match</button><button class="btn s" id="scr">👥 Manage Scorers</button>` : ""}<div id="ml"></div><div id="msg" class="msg"></div>`;
   $("#ft").onchange = e => { S.tour = e.target.value; matchList(); };
   $("#tm").onclick = () => { S.tab = "m"; list(); }; $("#tp").onclick = () => { S.tab = "p"; list(); };
   if ($("#ad")) $("#ad").onclick = login;
-  if ($("#so")) $("#so").onclick = () => signOut(auth);
+  if ($("#so")) $("#so").onclick = async () => { await signOut(auth); S.guest = false; S.admin = false; S.tids = []; S.tour = ""; start(); };
   if ($("#sch")) $("#sch").onclick = schedule;
   if ($("#scr")) $("#scr").onclick = scorers;
   matchList();
 }
 function matchList(){
   if (!$("#ml")) return;
+  if (scoped() && !visTours().length) { $("#ml").innerHTML = `<div class="mut c" style="margin:24px 0">You haven't been added as a scorer to any tournament yet.</div>`; return; }
   if (S.tab === "p") { $("#ml").innerHTML = points(); return; }
-  const all = S.matches.filter(m => !S.tour || m.tid === S.tour), asc = (a, b) => (a.when || 0) - (b.when || 0);
+  const all = S.matches.filter(m => (!scoped() || (S.tids || []).includes(m.tid)) && (!S.tour || m.tid === S.tour)), asc = (a, b) => (a.when || 0) - (b.when || 0);
   const G = {u:all.filter(m => m.status === "scheduled").sort(asc), l:all.filter(m => m.status === "live").sort(asc), p:all.filter(m => m.status === "completed").sort((a, b) => asc(b, a))};
   const mt = S.mt || (G.l.length ? "l" : "u");
   const card = m => {
@@ -365,7 +380,7 @@ function login(){
   $("#app").innerHTML = `<div class="top"><h1 class="gold">🔒 Sign In</h1></div><label>Email</label><input id="ae" type="text" autocomplete="username"><label>Password</label><input id="ap" type="password" autocomplete="current-password">
     <button class="btn" id="si">Sign In</button><button class="btn s" id="bk">← Back</button><div id="msg" class="msg"></div>`;
   const go = async () => {
-    try { await signInWithEmailAndPassword(auth, $("#ae").value.trim(), $("#ap").value); list(); }
+    try { await signInWithEmailAndPassword(auth, $("#ae").value.trim(), $("#ap").value); S.guest = false; await role(auth.currentUser); S.tour = ""; list(); }
     catch (e) { $("#ap").value = ""; flash(e.code === "auth/too-many-requests" ? "Too many attempts. Try later." : "Incorrect email or password."); }
   };
   $("#si").onclick = go; $("#bk").onclick = list;
@@ -615,7 +630,7 @@ function overlay(id){
 const q = new URLSearchParams(location.search), mid = (q.get("match") || "").trim().toUpperCase();
 if (q.get("mode") === "overlay") overlay(mid);
 else {
-  await auth.authStateReady(); await role(auth.currentUser); S.sumParam = q.get("summary") === "1";
+  await auth.authStateReady(); await role(auth.currentUser); S.sumParam = q.get("summary") === "1"; if (mid && !auth.currentUser) S.guest = true;
   onAuthStateChanged(auth, async u => { await role(u); if (S.view === "list") list(); else if (S.view === "match" && S.m) matchView(); });
   try { const t = await getDocs(collection(db, "tournaments")); S.tours = [S.tours[0], ...t.docs.map(d => ({id:d.id, name:d.data().name || d.id, at:d.data().created || 0})).sort((a, b) => a.at - b.at)]; } catch {}
   onSnapshot(collection(db, "matches"), s => { S.matches = s.docs.map(d => ({...d.data(), id:d.id})); if (S.view === "list") matchList(); });
