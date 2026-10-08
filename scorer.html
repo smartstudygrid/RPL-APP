@@ -513,7 +513,7 @@ function matchView(){
            <h3>NO BALLS</h3><div class="xg" style="grid-template-columns:repeat(6,1fr)">${[0,1,2,3,4,6].map(v => `<button class="sb" data-xk="nb" data-xv="${v}">N+${v}</button>`).join("")}</div><button class="btn s" id="xc">Cancel</button></div>`
         : `<div class="g4">${[0,1,2,3].map(v => `<button class="sb" data-r="${v}">${v}</button>`).join("")}</div>
            <div class="g4"><button class="sb f" data-r="4">4</button><button class="sb s6" data-r="6">6</button><button class="sb o" id="out">OUT</button><button class="sb u" id="un">UNDO</button></div>
-           <button class="btn" id="ex">ADD EXTRAS</button>${c ? `<div class="g2"><button class="btn s" id="sw">⇄ Switch Strike</button><button class="btn s" id="cb">✎ Change Batter</button></div>` : ""}`;
+           <button class="sb" id="ex" style="width:100%;margin:0 0 8px;font-size:18px;letter-spacing:2px">ADD EXTRAS</button>${c ? `<div class="g2"><button class="btn s" id="sw">⇄ Switch Strike</button><button class="btn s" id="cb">✎ Change Batter</button></div>` : ""}`;
     } else if (A && i.done) h += `<button class="btn s" id="un">↩ Undo last ball</button>`;
     if (!i.done) h += `<div class="mut c">Live — updates automatically</div>`;
     h += `<details id="sd" class="mut" style="margin-top:12px" ${(S.sumOpen ?? (m.status === "completed" || S.sumParam)) ? "open" : ""}><summary>📊 Match Summary</summary><div style="margin-top:8px">${summary(m)}<div style="display:flex;gap:8px;margin-top:8px"><a class="btn s sm" target="_blank" href="https://wa.me/?text=${encodeURIComponent(summaryText(m, view + "&summary=1"))}">📲 Share Summary</a><button class="btn s sm" id="dls">📥 Download Image</button></div></div></details>`;
