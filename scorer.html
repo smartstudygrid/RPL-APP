@@ -492,7 +492,7 @@ function matchView(){
     <div class="mut c" style="margin-bottom:6px">${esc(tname(m.tid))} · ${m.overs} overs${m.when ? " · " + when(m.when) : ""}</div>`;
   if (m.status === "scheduled") {
     h += `<div class="card" style="cursor:default"><div class="vs c"><b>${esc(m.n1)}</b> vs <b>${esc(m.n2)}</b></div><div class="mut c">${esc(m.venue || "")}</div></div>`;
-    if (A) h += `<label>Who bats first?</label><select id="bf"><option value="1">${esc(m.n1)}</option><option value="2">${esc(m.n2)}</option></select>${P ? squadPick(m, 1) + squadPick(m, 2) : ""}<button class="btn" id="st">Start Match</button>`;
+    if (A) h += `${P ? squadPick(m, 1) + squadPick(m, 2) : ""}<button class="btn" id="st">Start Match</button>`;
     else h += `<div class="tg">Match not started yet</div>`;
   } else {
     h += ticker(m) + players(m);
@@ -529,11 +529,21 @@ function matchView(){
   if ($("#sd")) $("#sd").ontoggle = () => { S.sumOpen = $("#sd").open; };
   const on = (s, fn) => { const e = $(s); if (e) e.onclick = fn; };
   on("#st", () => {
-    const u = {status:"live", bat1:+$("#bf").value, innings:1, runs:0, balls:0, history:[], cur:null};
+    const u = {status:"live", innings:1, runs:0, balls:0, history:[], cur:null};
     if (P) {
       for (const k of [1, 2]) { if (S.sel[k].length !== Math.min(11, m["pl" + k].length)) return flash("Select the playing XI for both teams."); u["xi" + k] = S.sel[k]; u["s" + k] = S.sub[k] || ""; }
     }
-    act(() => updateDoc(ref(m.id), u));
+    const ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:16px";
+    ov.innerHTML = `<div class="xm" style="width:100%;max-width:420px"><h3>WHO IS BATTING FIRST?</h3><button class="btn" data-bf="1">${esc(m.n1)}</button><button class="btn" data-bf="2">${esc(m.n2)}</button><button class="btn s" data-bf="0">Cancel</button></div>`;
+    ov.onclick = e => {
+      const b = e.target.closest("[data-bf]"); if (!b) return;
+      ov.remove();
+      if (b.dataset.bf === "0") return;
+      u.bat1 = +b.dataset.bf;
+      act(() => updateDoc(ref(m.id), u));
+    };
+    document.body.appendChild(ov);
   });
   on("#s2", () => act(() => updateDoc(ref(m.id), {innings:2, inn1:m.runs, inn1w:i.w, inn1b:m.balls, hist1:m.history, runs:0, balls:0, history:[], cur:null})));
   on("#cf", () => {
