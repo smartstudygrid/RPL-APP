@@ -41,7 +41,9 @@ select option{background:#0b111c}
 .tabs{display:flex;gap:8px;margin:4px 0 8px}.btn.sm.on{background:linear-gradient(135deg,#c8a84b,#f5d073);color:#0a0a1a}
 .g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 html.ovh{font-size:1vw;background:transparent!important}
-.ob{position:fixed;left:0;right:0;bottom:0;height:8rem;display:flex;flex-direction:column;color:#fff;font-family:Oswald,sans-serif;text-transform:uppercase;background:linear-gradient(180deg,rgba(14,20,12,.93),rgba(4,6,4,.95));border-top:.14rem solid #7ee02a;border-bottom:.14rem solid #7ee02a;box-shadow:0 0 1.2rem rgba(126,224,42,.45),inset 0 0 1.4rem rgba(126,224,42,.1);overflow:hidden}
+.ph{flex:none;align-self:flex-start;width:7.4rem;height:7.4rem;margin-top:-2.4rem;border:.22rem solid #fff;background:#222;box-shadow:0 0 0 .2rem #000,0 .4rem 1rem rgba(0,0,0,.6);overflow:hidden}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ob{position:fixed;left:0;right:0;bottom:0;height:8rem;display:flex;flex-direction:column;color:#fff;font-family:Oswald,sans-serif;text-transform:uppercase;background:linear-gradient(180deg,rgba(14,20,12,.93),rgba(4,6,4,.95));border-top:.14rem solid #7ee02a;border-bottom:.14rem solid #7ee02a;box-shadow:0 0 1.2rem rgba(126,224,42,.45),inset 0 0 1.4rem rgba(126,224,42,.1);overflow:visible}
 .ob1{height:5rem;flex:none;display:flex;align-items:stretch}
 .lp{flex:none;display:flex;align-items:center;justify-content:center;padding:0 3.2rem;background:linear-gradient(180deg,#8cf230,#4e9f12);clip-path:polygon(0 0,100% 0,calc(100% - 1.6rem) 100%,0 100%)}
 .tm{display:flex;align-items:center;line-height:1;color:#0a0f06}
@@ -124,7 +126,7 @@ const cfg = {
 const app = initializeApp(cfg);
 const db = getFirestore(app), auth = getAuth(app);
 
-const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:"", tab:"m", sel:{1:[],2:[]}, sub:{1:"",2:""}};
+const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:"", tab:"m", mt:"", pics:{1:{},2:{}}, picsFor:"", sel:{1:[],2:[]}, sub:{1:"",2:""}};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const wk = m => (m.history || []).filter(x => x.w).length;
@@ -215,14 +217,19 @@ function list(){
 function matchList(){
   if (!$("#ml")) return;
   if (S.tab === "p") { $("#ml").innerHTML = points(); return; }
-  const ms = S.matches.filter(m => !S.tour || m.tid === S.tour).sort((a, b) => (a.when || 0) - (b.when || 0));
-  $("#ml").innerHTML = ms.map(m => {
+  const all = S.matches.filter(m => !S.tour || m.tid === S.tour), asc = (a, b) => (a.when || 0) - (b.when || 0);
+  const G = {u:all.filter(m => m.status === "scheduled").sort(asc), l:all.filter(m => m.status === "live").sort(asc), p:all.filter(m => m.status === "completed").sort((a, b) => asc(b, a))};
+  const mt = S.mt || (G.l.length ? "l" : "u");
+  const card = m => {
     const i = info({...m, history:m.history || []});
     const line = m.status === "scheduled" ? "" : `<div class="os gold" style="font-size:17px">${i.done ? "🏆 " + esc(i.res) : `${esc(i.bat)} ${m.runs}/${i.w} (${ovs(m.balls)})`}</div>`;
     return `<div class="card" data-id="${m.id}"><div class="row"><span class="badge ${m.status}">${m.status === "live" ? "● LIVE" : m.status === "completed" ? "FULL TIME" : "UPCOMING"}</span><span class="mut">${esc(tname(m.tid))} · ${m.overs} ov</span></div>
       <div class="vs"><b>${esc(m.n1)}</b> vs <b>${esc(m.n2)}</b></div><div class="mut">${when(m.when)}${m.venue ? " · " + esc(m.venue) : ""}</div>${line}
       ${S.admin ? `<button class="btn s sm" data-del="${m.id}" style="margin-top:8px">Delete</button>` : ""}</div>`;
-  }).join("") || `<div class="mut c" style="margin:24px 0">No matches yet.</div>`;
+  };
+  const tabs = `<div class="tabs" style="margin-top:0">${[["u", "Upcoming"], ["l", "Live"], ["p", "Past"]].map(([k, t]) => `<button class="btn s sm ${mt === k ? "on" : ""}" style="flex:1" data-mt="${k}">${t} (${G[k].length})</button>`).join("")}</div>`;
+  $("#ml").innerHTML = tabs + (G[mt].map(card).join("") || `<div class="mut c" style="margin:24px 0">No ${{u:"upcoming", l:"live", p:"past"}[mt]} matches.</div>`);
+  document.querySelectorAll("[data-mt]").forEach(b => b.onclick = () => { S.mt = b.dataset.mt; matchList(); });
   document.querySelectorAll("[data-id]").forEach(c => c.onclick = () => openMatch(c.dataset.id));
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm("Delete this match?")) act(() => deleteDoc(ref(b.dataset.del))); });
 }
@@ -558,7 +565,9 @@ function bar(m){
   const first = []; h.forEach(x => { if (x.p) x.p.slice(0, 2).forEach(n => n && !first.includes(n) && first.push(n)); });
   const idx = n => first.includes(n) ? first.indexOf(n) : 99;
   const bs = [c.s, c.n].filter(Boolean).sort((a, b) => idx(a) - idx(b));
-  const bt = n => { const [r, b] = bStat(h, n); return `<div class="bt"><span class="nm"><u class="${n === c.s ? "on" : ""}"></u>${esc(n)}</span><span class="rn">${r}<small>(${b})</small></span></div>`; };
+  const kb = i.inn === 1 ? (m.bat1 === 2 ? 2 : 1) : (m.bat1 === 2 ? 1 : 2);
+  const pic = n => { const p = (S.pics[kb] || {})[n]; return p ? `<span class="ph"><img src="data:image/jpeg;base64,${p}"></span>` : ""; };
+  const bt = n => { const [r, b] = bStat(h, n); return `<div class="bt"><span class="nm"><u class="${n === c.s ? "on" : ""}"></u>${esc(n)}</span>${pic(n)}<span class="rn">${r}<small>(${b})</small></span></div>`; };
   const crr = m.balls ? (m.runs / (m.balls / 6)).toFixed(2) : "0.00";
   const left = i.maxb - m.balls;
   let mid = "";
@@ -581,11 +590,24 @@ function bar(m){
       <div class="mid">${mid}</div>
       <div class="bw">${esc((c.b || "—").toUpperCase())}${c.b ? `<em>${fig(c.b)}</em>` : ""}</div></div></div>`;
 }
+async function loadPics(m){
+  if (S.picsFor === m.id) return; S.picsFor = m.id; S.pics = {1:{}, 2:{}};
+  for (const k of [1, 2]) {
+    if (!m["t" + k]) continue;
+    try {
+      const d = (await getDoc(doc(db, "squads", m["t" + k]))).data() || {};
+      (d.player_list || []).forEach((n, i) => { const p = (d.squad_pics || {})[i]; if (n && p) S.pics[k][n] = p; });
+      if (d.captain_name && d.cap_pic) S.pics[k][d.captain_name] = d.cap_pic;
+    } catch {}
+  }
+}
 function overlay(id){
   document.documentElement.classList.add("ovh"); document.body.classList.add("ovb");
+  let last = null; const draw = () => { $("#app").innerHTML = last ? bar(last) : ""; };
   onSnapshot(ref(id), s => {
-    if (!s.exists()) { $("#app").innerHTML = ""; return; }
-    $("#app").innerHTML = bar({...s.data(), history:s.data().history || []});
+    if (!s.exists()) { last = null; return draw(); }
+    last = {...s.data(), id:s.id, history:s.data().history || []}; draw();
+    if (S.picsFor !== s.id) loadPics(last).then(draw);
   });
 }
 
