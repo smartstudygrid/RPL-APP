@@ -134,7 +134,7 @@ body.ovb .foot{display:none}
 
 <script type="module">
 import {initializeApp,getApps} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,collection,doc,getDoc,getDocs,arrayUnion,arrayRemove,setDoc,updateDoc,deleteDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,initializeFirestore,collection,doc,getDoc,getDocs,arrayUnion,arrayRemove,setDoc,updateDoc,deleteDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const cfg = {
@@ -146,7 +146,7 @@ const cfg = {
   appId: "1:833946397398:web:a14bba67a7e3cbab9d7777"
 };
 const app = initializeApp(cfg);
-const db = getFirestore(app), auth = getAuth(app);
+const db = initializeFirestore(app, {experimentalForceLongPolling:true}), auth = getAuth(app);
 
 const S = {tours:[{id:"default", name:"Challenger's Cup"}], matches:[], tour:"", admin:false, squads:null, m:null, ex:false, view:"", tab:"m", mt:"", pics:{1:{},2:{}}, picsFor:"", sel:{1:[],2:[]}, sub:{1:"",2:""}};
 const $ = s => document.querySelector(s);
