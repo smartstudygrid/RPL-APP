@@ -135,7 +135,7 @@ body.ovb .foot{display:none}
 <script type="module">
 import {initializeApp,getApps} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getFirestore,initializeFirestore,collection,doc,getDoc,getDocs,arrayUnion,arrayRemove,setDoc,updateDoc,deleteDoc,onSnapshot} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,sendPasswordResetEmail,signOut,onAuthStateChanged,updateProfile} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const cfg = {
   apiKey: "AIzaSyDkGhScAIq0tkzEosWkScD0doTq9VyLaq4",
@@ -239,12 +239,14 @@ function list(){
   if (S.tour && !vt.some(t => t.id === S.tour)) S.tour = "";
   if (scoped() && !S.tour && vt.length === 1) S.tour = vt[0].id;
   $("#app").innerHTML = `<div class="top"><h1 class="gold">🏏 Smart Scorer</h1>${auth.currentUser ? `<button class="btn s sm" id="so">Sign Out</button>`:`<button class="btn s sm" id="ad">Sign In</button>`}</div>
+    ${auth.currentUser ? `<div class="mut c" id="un" style="cursor:pointer;margin-bottom:6px">👤 ${esc(auth.currentUser.displayName || "Add your name")} ✎</div>` : ""}
     <select id="ft">${!scoped() ? `<option value="">All tournaments</option>` : vt.length > 1 ? `<option value="">All my tournaments</option>` : ""}${vt.map(t => `<option value="${esc(t.id)}" ${t.id === S.tour ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
     <div class="tabs"><button class="btn s sm ${S.tab === "m" ? "on" : ""}" id="tm">Matches</button><button class="btn s sm ${S.tab === "p" ? "on" : ""}" id="tp">Points Table</button></div>
     ${S.admin ? `<button class="btn" id="sch">＋ Schedule Match</button><button class="btn s" id="scr">👥 Manage Scorers</button>` : ""}<div id="ml"></div><div id="msg" class="msg"></div>`;
   $("#ft").onchange = e => { S.tour = e.target.value; matchList(); };
   $("#tm").onclick = () => { S.tab = "m"; list(); }; $("#tp").onclick = () => { S.tab = "p"; list(); };
   if ($("#ad")) $("#ad").onclick = login;
+  if ($("#un")) $("#un").onclick = () => { const v = prompt("Your name", auth.currentUser.displayName || ""); if (v === null) return; act(async () => { await updateProfile(auth.currentUser, {displayName:v.trim()}); list(); }); };
   if ($("#so")) $("#so").onclick = async () => { await signOut(auth); S.guest = false; S.admin = false; S.tids = []; S.tour = ""; start(); };
   if ($("#sch")) $("#sch").onclick = schedule;
   if ($("#scr")) $("#scr").onclick = scorers;
